@@ -38,20 +38,20 @@ public class SarifReportGenerator : IReportGenerator
             });
         }
 
-        var rules = new JsonArray();
-        foreach (var ruleId in result.Issues.Select(i => i.RuleId).Distinct())
-            rules.Add(new JsonObject { ["id"] = ruleId });
+        var rules = new JsonArray(result.Issues
+            .Select(i => i.RuleId)
+            .Distinct()
+            .Select(ruleId => (JsonNode)new JsonObject { ["id"] = ruleId })
+            .ToArray());
 
-        var notifications = new JsonArray();
-        foreach (var error in result.Errors)
-        {
-            notifications.Add(new JsonObject
+        var notifications = new JsonArray(result.Errors
+            .Select(error => (JsonNode)new JsonObject
             {
                 ["level"] = "error",
                 ["message"] = new JsonObject { ["text"] = $"{error.Language}: {error.Message}" },
                 ["properties"] = new JsonObject { ["language"] = error.Language },
-            });
-        }
+            })
+            .ToArray());
 
         var sarif = new JsonObject
         {
@@ -65,14 +65,11 @@ public class SarifReportGenerator : IReportGenerator
                     {
                         ["driver"] = new JsonObject { ["name"] = "koduma", ["version"] = "0.1.0", ["rules"] = rules }
                     },
-                    ["invocations"] = new JsonArray
+                    ["invocations"] = new JsonArray(new JsonObject
                     {
-                        new JsonObject
-                        {
-                            ["executionSuccessful"] = result.Errors.Count == 0,
-                            ["toolExecutionNotifications"] = notifications,
-                        }
-                    },
+                        ["executionSuccessful"] = result.Errors.Count == 0,
+                        ["toolExecutionNotifications"] = notifications,
+                    }),
                     ["results"] = results
                 }
             }
