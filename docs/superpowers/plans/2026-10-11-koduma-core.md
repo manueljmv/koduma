@@ -632,12 +632,11 @@ git commit -m "feat: add file discovery with gitignore/exclude/binary/size filte
 - Create: `src/Koduma.Core/Config/RuleOverride.cs`
 - Create: `src/Koduma.Core/Config/KodumaConfigException.cs`
 - Create: `src/Koduma.Core/Config/KodumaConfigLoader.cs`
-- Modify: `src/Koduma.Core/Model/KodumaJsonContext.cs`
 - Test: `tests/Koduma.Core.Tests/KodumaConfigLoaderTests.cs`
 
 **Interfaces:**
 - Consumes: nothing new.
-- Produces: `KodumaConfigLoader.LoadOrDefault(string projectPath) -> KodumaConfig` (throws `KodumaConfigException` on invalid input), `KodumaConfig.Rules -> Dictionary<string, RuleOverride>`, `RuleOverride(bool? Enabled, Severity? Severity)` — consumed by the orchestrator (Task 5) and analyzers (Tasks 6-8) to decide whether/how to report a rule, and by the CLI (Task 11) to map a load failure to exit code 2.
+- Produces: `KodumaConfigLoader.LoadOrDefault(string projectPath) -> KodumaConfig` (throws `KodumaConfigException` on invalid input), `KodumaConfig.Rules -> Dictionary<string, RuleOverride>`, `RuleOverride(bool? Enabled, Severity? Severity)` — consumed by the orchestrator (Task 5), which applies the overrides (drop disabled rules, replace severity) when it aggregates issues from every analyzer, and by the CLI (Task 11) to map a load failure to exit code 2.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -840,8 +839,8 @@ git commit -m "feat: load and validate koduma.json rule overrides and excludes"
 - Test: `tests/Koduma.Core.Tests/AnalysisOrchestratorTests.cs`
 
 **Interfaces:**
-- Consumes: `IFileDiscovery` (Task 3), `KodumaConfig` (Task 4).
-- Produces: `ILanguageAnalyzer { string Language; IReadOnlyCollection<string> FileExtensions; bool AppliesToAllFiles; Task<LanguageAnalysisResult> AnalyzeAsync(IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken ct); }`, `LanguageAnalysisResult(IReadOnlyList<IIssue> Issues, AnalysisMetrics Metrics, string? Error)`, `AnalysisOrchestrator(IEnumerable<ILanguageAnalyzer> analyzers, IFileDiscovery fileDiscovery)` with `Task<AnalysisResult> AnalyzeAsync(string projectPath, KodumaConfig config, CancellationToken ct = default)` — this is what Tasks 6-8's analyzers plug into, and what the CLI (Task 11) and MCP server (Task 13) call directly.
+- Consumes: `IFileDiscovery` (Task 3), `KodumaConfig`/`RuleOverride` (Task 4).
+- Produces: `ILanguageAnalyzer { string Language; IReadOnlyCollection<string> FileExtensions; bool AppliesToAllFiles; Task<LanguageAnalysisResult> AnalyzeAsync(IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken ct); }`, `LanguageAnalysisResult(IReadOnlyList<IIssue> Issues, AnalysisMetrics Metrics, string? Error)`, `AnalysisOrchestrator(IEnumerable<ILanguageAnalyzer> analyzers, IFileDiscovery fileDiscovery)` with `Task<AnalysisResult> AnalyzeAsync(string projectPath, KodumaConfig config, CancellationToken ct = default)` — this is what Tasks 6-8's analyzers plug into, and what the CLI (Task 11) and MCP server (Task 13) call directly. The orchestrator is also the single place that applies `config.Rules` overrides (per the spec's `koduma.json` section: `"off"` drops every issue with that `RuleId`; a `{"severity": ...}` override replaces `Severity` on every issue with that `RuleId`) to the aggregated issue list before returning — no analyzer applies its own overrides.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -922,6 +921,31 @@ public class AnalysisOrchestratorTests
         Assert.Single(result.Errors);
         Assert.Equal("javascript", result.Errors[0].Language);
         Assert.Single(result.Issues);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_AppliesRuleOverrides_DroppingOffRulesAndReplacingSeverity()
+    {
+        var offIssue = new Issue("CS-NAMING-001", Severity.Minor, Category.CodeSmell, "/repo/a.cs", 1, 1, 1, 1, "x", "csharp");
+        var severityIssue = new Issue("SEC-SECRET-001", Severity.Critical, Category.Security, "/repo/a.cs", 2, 1, 2, 1, "y", "csharp");
+        var analyzer = new FakeAnalyzer("csharp", new[] { ".cs" }, appliesToAll: false, _ =>
+            new LanguageAnalysisResult(new IIssue[] { offIssue, severityIssue }, new AnalysisMetrics(0, 0, 0, 1), Error: null));
+
+        var config = new KodumaConfig(
+            new Dictionary<string, RuleOverride>
+            {
+                ["CS-NAMING-001"] = new RuleOverride(Enabled: false, Severity: null),
+                ["SEC-SECRET-001"] = new RuleOverride(Enabled: null, Severity: Severity.Blocker),
+            },
+            new List<string>());
+
+        var orchestrator = new AnalysisOrchestrator(new ILanguageAnalyzer[] { analyzer }, new FakeDiscovery());
+
+        var result = await orchestrator.AnalyzeAsync("/repo", config);
+
+        Assert.Single(result.Issues);
+        Assert.Equal("SEC-SECRET-001", result.Issues[0].RuleId);
+        Assert.Equal(Severity.Blocker, result.Issues[0].Severity);
     }
 }
 ```
@@ -1022,13 +1046,38 @@ public class AnalysisOrchestrator
 
         stopwatch.Stop();
 
+        var finalIssues = ApplyRuleOverrides(issues, config);
+
         return new AnalysisResult(
             ProjectPath: projectPath,
             Timestamp: DateTimeOffset.UtcNow,
             DurationMs: stopwatch.ElapsedMilliseconds,
-            Issues: issues,
+            Issues: finalIssues,
             Metrics: new AnalysisMetrics(totalLoc, totalComplexity, totalDuplicated, totalFiles),
             Errors: errors);
+    }
+
+    private static IReadOnlyList<IIssue> ApplyRuleOverrides(List<IIssue> issues, KodumaConfig config)
+    {
+        var result = new List<IIssue>();
+
+        foreach (var issue in issues)
+        {
+            if (!config.Rules.TryGetValue(issue.RuleId, out var @override))
+            {
+                result.Add(issue);
+                continue;
+            }
+
+            if (@override.Enabled == false)
+                continue;
+
+            result.Add(@override.Severity is { } severity
+                ? new Issue(issue.RuleId, severity, issue.Category, issue.FilePath, issue.Line, issue.Column, issue.EndLine, issue.EndColumn, issue.Message, issue.Language)
+                : issue);
+        }
+
+        return result;
     }
 }
 ```
@@ -1836,7 +1885,6 @@ git commit -m "feat: add table and JSON report generators"
 **Files:**
 - Create: `src/Koduma.Reporting/HtmlReportGenerator.cs`
 - Create: `src/Koduma.Reporting/SarifReportGenerator.cs`
-- Create: `src/Koduma.Core/Model/KodumaJsonContext.cs` (modify — add SARIF DTOs)
 - Test: `tests/Koduma.Reporting.Tests/HtmlReportGeneratorTests.cs`
 - Test: `tests/Koduma.Reporting.Tests/SarifReportGeneratorTests.cs`
 
