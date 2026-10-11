@@ -25,6 +25,10 @@ public class EslintAnalyzer : ILanguageAnalyzer
             return new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 0), Error: $"eslint could not be run: {stdErr}");
 
         // ESLint exits 1 when it finds lint errors, which is expected, not a failure.
+        // Any other nonzero code is a fatal ESLint error (e.g. broken config) and must not look like a clean run.
+        if (exitCode != 0 && exitCode != 1)
+            return new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 0), Error: $"eslint exited with code {exitCode}: {stdErr}");
+
         if (string.IsNullOrWhiteSpace(stdOut))
             return new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, filePaths.Count), Error: null);
 

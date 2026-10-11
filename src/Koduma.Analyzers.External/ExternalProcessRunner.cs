@@ -4,7 +4,7 @@ namespace Koduma.Analyzers.External;
 
 public class ExternalProcessRunner
 {
-    public async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments)
+    public virtual async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments)
     {
         var startInfo = new ProcessStartInfo
         {
