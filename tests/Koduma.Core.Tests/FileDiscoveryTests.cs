@@ -5,9 +5,19 @@ using Xunit;
 public class FileDiscoveryTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "koduma-discovery-" + Guid.NewGuid());
+    private readonly string _outside = Path.Combine(Path.GetTempPath(), "koduma-outside-" + Guid.NewGuid());
 
-    public FileDiscoveryTests() => Directory.CreateDirectory(_root);
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+    public FileDiscoveryTests()
+    {
+        Directory.CreateDirectory(_root);
+        Directory.CreateDirectory(_outside);
+    }
+
+    public void Dispose()
+    {
+        Directory.Delete(_root, recursive: true);
+        Directory.Delete(_outside, recursive: true);
+    }
 
     [Fact]
     public void DiscoverFiles_SkipsGitignoredAndExcludedAndBinaryAndOversizedFiles()
@@ -35,5 +45,23 @@ public class FileDiscoveryTests : IDisposable
         Assert.DoesNotContain("excluded/skip.cs", relative);
         Assert.DoesNotContain("photo.png", relative);
         Assert.DoesNotContain("huge.cs", relative);
+    }
+
+    [Fact]
+    public async Task DiscoverFiles_DoesNotFollowSymlinks()
+    {
+        File.WriteAllText(Path.Combine(_outside, "secret.cs"), "class Secret {}");
+        File.WriteAllText(Path.Combine(_root, "Program.cs"), "class P {}");
+        File.CreateSymbolicLink(Path.Combine(_root, "escape"), _outside);
+        File.CreateSymbolicLink(Path.Combine(_root, "loop"), _root);
+
+        var discovery = Task.Run(() => new FileDiscovery().DiscoverFiles(_root, KodumaConfig.Default));
+        var completed = await Task.WhenAny(discovery, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        Assert.Same(discovery, completed);
+        var files = await discovery;
+        Assert.DoesNotContain(files, f => f.EndsWith("secret.cs", StringComparison.Ordinal));
+        Assert.Single(files);
+        Assert.EndsWith("Program.cs", files[0], StringComparison.Ordinal);
     }
 }

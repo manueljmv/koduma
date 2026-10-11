@@ -20,9 +20,24 @@ public class FileDiscovery : IFileDiscovery
         var regexes = allPatterns.Select(GlobToRegex).ToList();
 
         var result = new List<string>();
+        CollectFiles(rootPath, rootPath, regexes, result);
+        return result;
+    }
 
-        foreach (var file in Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories))
+    private static void CollectFiles(string rootPath, string directory, List<Regex> regexes, List<string> result)
+    {
+        foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos())
         {
+            if (entry.LinkTarget is not null)
+                continue;
+
+            if (entry is DirectoryInfo subdirectory)
+            {
+                CollectFiles(rootPath, subdirectory.FullName, regexes, result);
+                continue;
+            }
+
+            var file = entry.FullName;
             var relative = Path.GetRelativePath(rootPath, file).Replace('\\', '/');
 
             if (relative.Split('/').Contains(".git"))
@@ -34,14 +49,11 @@ public class FileDiscovery : IFileDiscovery
             if (BinaryExtensions.Contains(Path.GetExtension(file)))
                 continue;
 
-            var info = new FileInfo(file);
-            if (info.Length > MaxFileSizeBytes)
+            if (((FileInfo)entry).Length > MaxFileSizeBytes)
                 continue;
 
             result.Add(file);
         }
-
-        return result;
     }
 
     private static List<string> LoadIgnorePatterns(string path)
