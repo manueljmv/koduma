@@ -71,8 +71,26 @@ public class FileDiscovery : IFileDiscovery
         return File.ReadAllLines(path)
             .Select(line => line.Trim())
             .Where(line => line.Length > 0 && !line.StartsWith('#'))
-            .Select(line => line.TrimEnd('/') + "/**")
+            .SelectMany(IgnoreLineToGlobs)
             .ToList();
+    }
+
+    private static IEnumerable<string> IgnoreLineToGlobs(string line)
+    {
+        var directoryOnly = line.EndsWith('/');
+        var pattern = line.TrimEnd('/');
+        // gitignore: a slash at the start or middle anchors the pattern to the root; otherwise it matches at any depth.
+        var anchored = pattern.Contains('/');
+        pattern = pattern.TrimStart('/');
+        if (pattern.Length == 0)
+            yield break;
+
+        if (!anchored)
+            pattern = "**/" + pattern;
+
+        yield return pattern + "/**";
+        if (!directoryOnly)
+            yield return pattern;
     }
 
     private static Regex GlobToRegex(string glob)

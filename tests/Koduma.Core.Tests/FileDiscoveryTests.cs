@@ -97,4 +97,57 @@ public class FileDiscoveryTests : IDisposable
         Assert.Contains(".hidden.cs", relative);
         Assert.DoesNotContain("locked/inside.cs", relative);
     }
+
+    private HashSet<string> DiscoverRelative() =>
+        new FileDiscovery().DiscoverFiles(_root, KodumaConfig.Default)
+            .Select(f => Path.GetRelativePath(_root, f).Replace('\\', '/'))
+            .ToHashSet();
+
+    [Fact]
+    public void DiscoverFiles_GitignoreFileGlob_ExcludesMatchesAtAnyDepth()
+    {
+        File.WriteAllText(Path.Combine(_root, ".gitignore"), "*.log\n");
+        File.WriteAllText(Path.Combine(_root, "app.log"), "x");
+        Directory.CreateDirectory(Path.Combine(_root, "sub"));
+        File.WriteAllText(Path.Combine(_root, "sub", "deep.log"), "x");
+        File.WriteAllText(Path.Combine(_root, "sub", "keep.cs"), "class K {}");
+
+        var relative = DiscoverRelative();
+
+        Assert.DoesNotContain("app.log", relative);
+        Assert.DoesNotContain("sub/deep.log", relative);
+        Assert.Contains("sub/keep.cs", relative);
+    }
+
+    [Fact]
+    public void DiscoverFiles_GitignoreRootAnchoredPattern_ExcludesOnlyTopLevel()
+    {
+        File.WriteAllText(Path.Combine(_root, ".gitignore"), "/secrets\n/private\n");
+        File.WriteAllText(Path.Combine(_root, "secrets"), "top-level secret file");
+        Directory.CreateDirectory(Path.Combine(_root, "private"));
+        File.WriteAllText(Path.Combine(_root, "private", "key.txt"), "x");
+        Directory.CreateDirectory(Path.Combine(_root, "sub"));
+        File.WriteAllText(Path.Combine(_root, "sub", "secrets"), "nested file");
+
+        var relative = DiscoverRelative();
+
+        Assert.DoesNotContain("secrets", relative);
+        Assert.DoesNotContain("private/key.txt", relative);
+        Assert.Contains("sub/secrets", relative);
+    }
+
+    [Fact]
+    public void DiscoverFiles_GitignoreTrailingSlash_ExcludesDirectoryAtAnyDepth_ButNotSameNamedFile()
+    {
+        File.WriteAllText(Path.Combine(_root, ".gitignore"), "bin/\n");
+        Directory.CreateDirectory(Path.Combine(_root, "src", "bin"));
+        File.WriteAllText(Path.Combine(_root, "src", "bin", "out.cs"), "class O {}");
+        Directory.CreateDirectory(Path.Combine(_root, "other"));
+        File.WriteAllText(Path.Combine(_root, "other", "bin"), "a file named bin");
+
+        var relative = DiscoverRelative();
+
+        Assert.DoesNotContain("src/bin/out.cs", relative);
+        Assert.Contains("other/bin", relative);
+    }
 }
