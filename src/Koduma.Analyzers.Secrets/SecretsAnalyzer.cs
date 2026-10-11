@@ -14,12 +14,16 @@ public class SecretsAnalyzer : ILanguageAnalyzer
     public IReadOnlyList<Rule> Rules { get; } = new[]
     {
         new Rule("SEC-SECRET-001", "Hardcoded secret", Category.Security, Severity.Critical, "security", EngineRuleId: null),
+        new Rule("SEC-SQLI-001", "Possible SQL injection", Category.Security, Severity.Critical, "security", EngineRuleId: null),
     };
 
-    private static readonly (string Name, Regex Pattern)[] Patterns =
+    private static readonly (string RuleId, string Name, Regex Pattern)[] Patterns =
     {
-        ("AWS access key", new Regex("AKIA[0-9A-Z]{16}", RegexOptions.Compiled)),
-        ("Hardcoded password", new Regex(@"password\s*=\s*""[^""]{8,}""", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("SEC-SECRET-001", "AWS access key", new Regex("AKIA[0-9A-Z]{16}", RegexOptions.Compiled)),
+        ("SEC-SECRET-001", "Hardcoded password", new Regex(@"password\s*=\s*""[^""]{8,}""", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("SEC-SQLI-001", "Possible SQL injection", new Regex(
+            @"(SELECT|INSERT|UPDATE|DELETE|DROP)\b[^\n]*(?:[""']\s*\+|\$\{|#\{)",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase)),
     };
 
     public Task<LanguageAnalysisResult> AnalyzeAsync(string projectPath, IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken)
@@ -31,14 +35,14 @@ public class SecretsAnalyzer : ILanguageAnalyzer
             var lines = File.ReadAllLines(file);
             for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
             {
-                foreach (var (name, pattern) in Patterns)
+                foreach (var (ruleId, name, pattern) in Patterns)
                 {
                     var match = pattern.Match(lines[lineIndex]);
                     if (!match.Success)
                         continue;
 
                     issues.Add(new Issue(
-                        RuleId: "SEC-SECRET-001",
+                        RuleId: ruleId,
                         Severity: Severity.Critical,
                         Category: Category.Security,
                         FilePath: file,
@@ -46,7 +50,7 @@ public class SecretsAnalyzer : ILanguageAnalyzer
                         Column: match.Index + 1,
                         EndLine: lineIndex + 1,
                         EndColumn: match.Index + match.Length + 1,
-                        Message: $"Possible hardcoded secret ({name}).",
+                        Message: ruleId == "SEC-SQLI-001" ? "Possible SQL injection." : $"Possible hardcoded secret ({name}).",
                         Language: "security"));
                 }
             }

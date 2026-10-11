@@ -25,4 +25,23 @@ public class SecretsAnalyzerTests : IDisposable
         Assert.All(result.Issues, i => Assert.Equal("SEC-SECRET-001", i.RuleId));
         Assert.All(result.Issues, i => Assert.Equal(Category.Security, i.Category));
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_FlagsStringConcatenatedAndInterpolatedSql_ButNotFixedQueries()
+    {
+        File.WriteAllText(_file, """
+        var ok = "SELECT fixed_value FROM t";
+        var risky1 = "SELECT * FROM users WHERE id = " + userId;
+        var risky2 = `SELECT * FROM t WHERE x = ${x}`;
+        """);
+
+        var analyzer = new SecretsAnalyzer();
+        var result = await analyzer.AnalyzeAsync(Path.GetDirectoryName(_file)!, new[] { _file }, KodumaConfig.Default, CancellationToken.None);
+
+        var sqliIssues = result.Issues.Where(i => i.RuleId == "SEC-SQLI-001").ToList();
+        Assert.Equal(2, sqliIssues.Count);
+        Assert.All(sqliIssues, i => Assert.Equal(Category.Security, i.Category));
+        Assert.Contains(sqliIssues, i => i.Line == 2);
+        Assert.Contains(sqliIssues, i => i.Line == 3);
+    }
 }
