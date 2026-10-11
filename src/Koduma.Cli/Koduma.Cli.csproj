@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Koduma.Core\Koduma.Core.csproj" />
+    <ProjectReference Include="..\Koduma.Analyzers.CSharp\Koduma.Analyzers.CSharp.csproj" />
+    <ProjectReference Include="..\Koduma.Analyzers.External\Koduma.Analyzers.External.csproj" />
+    <ProjectReference Include="..\Koduma.Analyzers.Secrets\Koduma.Analyzers.Secrets.csproj" />
+    <ProjectReference Include="..\Koduma.Reporting\Koduma.Reporting.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>
