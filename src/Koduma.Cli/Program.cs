@@ -30,6 +30,7 @@ return args[0] switch
 {
     "analyze" => await AnalyzeCommand.Run(args, analyzers, generators, Console.Out, Console.Error),
     "rules" => RulesCommand.Run(analyzers, Console.Out),
+    "mcp-serve" => await RunMcpServe(analyzers),
     _ => Unknown(args[0]),
 };
 
@@ -37,4 +38,10 @@ static int Unknown(string command)
 {
     Console.Error.WriteLine($"Unknown command '{command}'.");
     return 2;
+}
+
+static async Task<int> RunMcpServe(ILanguageAnalyzer[] analyzers)
+{
+    await Koduma.Mcp.KodumaMcpServer.RunAsync(analyzers, CancellationToken.None);
+    return 0;
 }

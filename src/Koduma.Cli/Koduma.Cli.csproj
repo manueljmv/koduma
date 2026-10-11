@@ -6,6 +6,7 @@
     <ProjectReference Include="..\Koduma.Analyzers.External\Koduma.Analyzers.External.csproj" />
     <ProjectReference Include="..\Koduma.Analyzers.Secrets\Koduma.Analyzers.Secrets.csproj" />
     <ProjectReference Include="..\Koduma.Reporting\Koduma.Reporting.csproj" />
+    <ProjectReference Include="..\Koduma.Mcp\Koduma.Mcp.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
