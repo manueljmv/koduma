@@ -121,4 +121,30 @@ public class AnalysisOrchestratorTests
         Assert.Single(result.Issues);
         Assert.Equal(5, result.Metrics.LinesOfCode);
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_ComputesDuplicatedLines_AcrossFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "koduma-dup-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            var duplicateBlock = string.Join('\n', Enumerable.Range(1, 6).Select(i => $"line{i}();"));
+            File.WriteAllText(Path.Combine(root, "a.cs"), duplicateBlock + "\nuniqueA();");
+            File.WriteAllText(Path.Combine(root, "b.cs"), duplicateBlock + "\nuniqueB();");
+
+            var analyzer = new FakeAnalyzer("csharp", new[] { ".cs" }, appliesToAll: false, _ =>
+                new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 2), Error: null));
+
+            var orchestrator = new AnalysisOrchestrator(new ILanguageAnalyzer[] { analyzer }, new FileDiscovery());
+
+            var result = await orchestrator.AnalyzeAsync(root, KodumaConfig.Default);
+
+            Assert.Equal(12, result.Metrics.DuplicatedLines);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

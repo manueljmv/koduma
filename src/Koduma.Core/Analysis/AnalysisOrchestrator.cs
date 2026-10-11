@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using Koduma.Core.Config;
 using Koduma.Core.Discovery;
 using Koduma.Core.Model;
@@ -47,7 +49,6 @@ public class AnalysisOrchestrator
         var errors = new List<AnalysisError>();
         var totalLoc = 0;
         var totalComplexity = 0;
-        var totalDuplicated = 0;
         var totalFiles = 0;
 
         foreach (var (language, languageResult) in perLanguageResults)
@@ -61,7 +62,6 @@ public class AnalysisOrchestrator
             issues.AddRange(languageResult.Issues);
             totalLoc += languageResult.Metrics.LinesOfCode;
             totalComplexity += languageResult.Metrics.CyclomaticComplexity;
-            totalDuplicated += languageResult.Metrics.DuplicatedLines;
             totalFiles += languageResult.Metrics.FilesAnalyzed;
         }
 
@@ -74,8 +74,53 @@ public class AnalysisOrchestrator
             Timestamp: DateTimeOffset.UtcNow,
             DurationMs: stopwatch.ElapsedMilliseconds,
             Issues: finalIssues,
-            Metrics: new AnalysisMetrics(totalLoc, totalComplexity, totalDuplicated, totalFiles),
+            Metrics: new AnalysisMetrics(totalLoc, totalComplexity, ComputeDuplicatedLines(allFiles), totalFiles),
             Errors: errors);
+    }
+
+    private static int ComputeDuplicatedLines(IReadOnlyList<string> files)
+    {
+        const int WindowSize = 6;
+        var windowOccurrences = new Dictionary<string, List<(string File, int StartLine)>>();
+
+        foreach (var file in files)
+        {
+            List<string> lines;
+            try
+            {
+                lines = File.ReadAllLines(file)
+                    .Select(l => l.Trim())
+                    .Where(l => l.Length > 0)
+                    .ToList();
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            for (var i = 0; i + WindowSize <= lines.Count; i++)
+            {
+                var window = string.Join("\n", lines.Skip(i).Take(WindowSize));
+                var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(window)));
+                if (!windowOccurrences.TryGetValue(hash, out var occurrences))
+                    windowOccurrences[hash] = occurrences = new List<(string, int)>();
+                occurrences.Add((file, i));
+            }
+        }
+
+        var duplicatedLineKeys = new HashSet<(string File, int Line)>();
+        foreach (var occurrences in windowOccurrences.Values.Where(o => o.Count > 1))
+        {
+            foreach (var (file, startLine) in occurrences)
+                for (var offset = 0; offset < WindowSize; offset++)
+                    duplicatedLineKeys.Add((file, startLine + offset));
+        }
+
+        return duplicatedLineKeys.Count;
     }
 
     private static IReadOnlyList<IIssue> ApplyRuleOverrides(List<IIssue> issues, KodumaConfig config)
