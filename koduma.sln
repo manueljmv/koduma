@@ -33,6 +33,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Koduma.Cli.Tests", "tests\K
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Koduma.Mcp", "src\Koduma.Mcp\Koduma.Mcp.csproj", "{08C3F932-559F-4AA9-ABEB-B406ECA91696}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Koduma.Integration.Tests", "tests\Koduma.Integration.Tests\Koduma.Integration.Tests.csproj", "{C5540C66-4BA6-4732-B9E3-89542214446C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -199,6 +201,18 @@ Global
 		{08C3F932-559F-4AA9-ABEB-B406ECA91696}.Release|x64.Build.0 = Release|Any CPU
 		{08C3F932-559F-4AA9-ABEB-B406ECA91696}.Release|x86.ActiveCfg = Release|Any CPU
 		{08C3F932-559F-4AA9-ABEB-B406ECA91696}.Release|x86.Build.0 = Release|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Debug|x64.Build.0 = Debug|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Debug|x86.Build.0 = Debug|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Release|x64.ActiveCfg = Release|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Release|x64.Build.0 = Release|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Release|x86.ActiveCfg = Release|Any CPU
+		{C5540C66-4BA6-4732-B9E3-89542214446C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -217,5 +231,6 @@ Global
 		{9582089B-A45B-4796-8D66-1988BBBAFAFD} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{260DF4CD-4033-4341-9EC9-92EBA4707EC5} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{08C3F932-559F-4AA9-ABEB-B406ECA91696} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{C5540C66-4BA6-4732-B9E3-89542214446C} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
