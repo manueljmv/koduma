@@ -26,6 +26,7 @@ public class AnalysisOrchestratorTests
         public string Language { get; }
         public IReadOnlyCollection<string> FileExtensions { get; }
         public bool AppliesToAllFiles { get; }
+        public IReadOnlyList<Rule> Rules => Array.Empty<Rule>();
 
         public Task<LanguageAnalysisResult> AnalyzeAsync(IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken ct) =>
             Task.FromResult(_handler(filePaths));

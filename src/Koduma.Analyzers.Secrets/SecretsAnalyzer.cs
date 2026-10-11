@@ -11,6 +11,11 @@ public class SecretsAnalyzer : ILanguageAnalyzer
     public IReadOnlyCollection<string> FileExtensions => Array.Empty<string>();
     public bool AppliesToAllFiles => true;
 
+    public IReadOnlyList<Rule> Rules { get; } = new[]
+    {
+        new Rule("SEC-SECRET-001", "Hardcoded secret", Category.Security, Severity.Critical, "security", EngineRuleId: null),
+    };
+
     private static readonly (string Name, Regex Pattern)[] Patterns =
     {
         ("AWS access key", new Regex("AKIA[0-9A-Z]{16}", RegexOptions.Compiled)),

@@ -11,6 +11,12 @@ public class CSharpAnalyzer : ILanguageAnalyzer
     public IReadOnlyCollection<string> FileExtensions => new[] { ".cs" };
     public bool AppliesToAllFiles => false;
 
+    public IReadOnlyList<Rule> Rules { get; } = new[]
+    {
+        new Rule("CS-NAMING-001", "Private field naming", Category.CodeSmell, Severity.Minor, "csharp", EngineRuleId: null),
+        new Rule("CS-COMPLEXITY-001", "Cyclomatic complexity", Category.CodeSmell, Severity.Major, "csharp", EngineRuleId: null),
+    };
+
     public Task<LanguageAnalysisResult> AnalyzeAsync(IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken)
     {
         var issues = new List<IIssue>();

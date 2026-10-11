@@ -29,6 +29,7 @@ if (args.Length == 0)
 return args[0] switch
 {
     "analyze" => await AnalyzeCommand.Run(args, analyzers, generators, Console.Out, Console.Error),
+    "rules" => RulesCommand.Run(analyzers, Console.Out),
     _ => Unknown(args[0]),
 };
 
