@@ -32,12 +32,20 @@ public static class AnalyzeCommand
         var orchestrator = new AnalysisOrchestrator(analyzers, new FileDiscovery());
         var result = await orchestrator.AnalyzeAsync(path, config);
 
-        foreach (var format in formats)
+        try
         {
-            var generator = generators.FirstOrDefault(g => g.Format == format)
-                ?? throw new KodumaConfigException($"Unknown format '{format}'.");
-            generator.Write(result, stdout);
-            stdout.WriteLine();
+            foreach (var format in formats)
+            {
+                var generator = generators.FirstOrDefault(g => g.Format == format)
+                    ?? throw new KodumaConfigException($"Unknown format '{format}'.");
+                generator.Write(result, stdout);
+                stdout.WriteLine();
+            }
+        }
+        catch (KodumaConfigException ex)
+        {
+            stderr.WriteLine(ex.Message);
+            return 2;
         }
 
         var hasBlockerOrCritical = result.Issues.Any(i => i.Severity is Severity.Blocker or Severity.Critical);
