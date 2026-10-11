@@ -30,7 +30,19 @@ public class HtmlReportGenerator : IReportGenerator
                 "</tr>");
         }
 
-        sb.AppendLine("</table></body></html>");
+        sb.AppendLine("</table>");
+
+        if (result.Errors.Count > 0)
+        {
+            sb.AppendLine("<h2>Analysis errors</h2>");
+            sb.AppendLine("<p>These languages were not fully analyzed:</p>");
+            sb.AppendLine("<ul>");
+            foreach (var error in result.Errors)
+                sb.AppendLine($"<li><strong>{WebUtility.HtmlEncode(error.Language)}</strong>: {WebUtility.HtmlEncode(error.Message)}</li>");
+            sb.AppendLine("</ul>");
+        }
+
+        sb.AppendLine("</body></html>");
         writer.Write(sb.ToString());
     }
 }

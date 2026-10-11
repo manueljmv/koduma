@@ -24,7 +24,7 @@ public class SarifReportGenerator : IReportGenerator
                     {
                         ["physicalLocation"] = new JsonObject
                         {
-                            ["artifactLocation"] = new JsonObject { ["uri"] = issue.FilePath },
+                            ["artifactLocation"] = new JsonObject { ["uri"] = ToRelativeUri(result.ProjectPath, issue.FilePath) },
                             ["region"] = new JsonObject
                             {
                                 ["startLine"] = issue.Line,
@@ -38,6 +38,21 @@ public class SarifReportGenerator : IReportGenerator
             });
         }
 
+        var rules = new JsonArray();
+        foreach (var ruleId in result.Issues.Select(i => i.RuleId).Distinct())
+            rules.Add(new JsonObject { ["id"] = ruleId });
+
+        var notifications = new JsonArray();
+        foreach (var error in result.Errors)
+        {
+            notifications.Add(new JsonObject
+            {
+                ["level"] = "error",
+                ["message"] = new JsonObject { ["text"] = $"{error.Language}: {error.Message}" },
+                ["properties"] = new JsonObject { ["language"] = error.Language },
+            });
+        }
+
         var sarif = new JsonObject
         {
             ["version"] = "2.1.0",
@@ -48,7 +63,15 @@ public class SarifReportGenerator : IReportGenerator
                 {
                     ["tool"] = new JsonObject
                     {
-                        ["driver"] = new JsonObject { ["name"] = "koduma", ["version"] = "0.1.0" }
+                        ["driver"] = new JsonObject { ["name"] = "koduma", ["version"] = "0.1.0", ["rules"] = rules }
+                    },
+                    ["invocations"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["executionSuccessful"] = result.Errors.Count == 0,
+                            ["toolExecutionNotifications"] = notifications,
+                        }
                     },
                     ["results"] = results
                 }
@@ -56,6 +79,12 @@ public class SarifReportGenerator : IReportGenerator
         };
 
         writer.Write(sarif.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static string ToRelativeUri(string projectPath, string filePath)
+    {
+        var relative = Path.IsPathRooted(filePath) ? Path.GetRelativePath(projectPath, filePath) : filePath;
+        return string.Join('/', relative.Replace('\\', '/').Split('/').Select(Uri.EscapeDataString));
     }
 
     private static string MapLevel(Severity severity) => severity switch
