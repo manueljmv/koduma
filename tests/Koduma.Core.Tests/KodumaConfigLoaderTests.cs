@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Koduma.Core.Config;
 using Koduma.Core.Model;
 using Xunit;
@@ -74,5 +75,29 @@ public class KodumaConfigLoaderTests : IDisposable
         """);
 
         Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root));
+    }
+
+    [Fact]
+    public void ParseRulesConfig_ParsesOffStringAndSeverityObject()
+    {
+        using var document = JsonDocument.Parse("""
+        {
+          "CS-NAMING-001": "off",
+          "SEC-SECRET-001": { "severity": "blocker" }
+        }
+        """);
+
+        var rules = KodumaConfigLoader.ParseRulesConfig(document.RootElement);
+
+        Assert.False(rules["CS-NAMING-001"].Enabled);
+        Assert.Equal(Severity.Blocker, rules["SEC-SECRET-001"].Severity);
+    }
+
+    [Fact]
+    public void ParseRulesConfig_Throws_WhenARuleShapeIsInvalid()
+    {
+        using var document = JsonDocument.Parse("""{ "CS-NAMING-001": 123 }""");
+
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.ParseRulesConfig(document.RootElement));
     }
 }

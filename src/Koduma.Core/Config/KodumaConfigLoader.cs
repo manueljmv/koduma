@@ -50,6 +50,17 @@ public static class KodumaConfigLoader
         return new KodumaConfig(rules, exclude);
     }
 
+    public static Dictionary<string, RuleOverride> ParseRulesConfig(JsonElement rulesElement)
+    {
+        var rules = new Dictionary<string, RuleOverride>();
+        foreach (var property in rulesElement.EnumerateObject())
+        {
+            var node = JsonNode.Parse(property.Value.GetRawText());
+            rules[property.Name] = ParseRuleOverride(property.Name, node);
+        }
+        return rules;
+    }
+
     private static RuleOverride ParseRuleOverride(string ruleId, JsonNode? value)
     {
         if (value is JsonValue scalar && scalar.TryGetValue<string>(out var text))
