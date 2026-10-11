@@ -111,4 +111,39 @@ public class AnalyzeCommandTests : IDisposable
         Assert.Contains("bogus", stderr.ToString());
         Assert.Empty(stdout.ToString());
     }
+
+    [Fact]
+    public async Task Run_ReturnsOne_WhenFailOnThresholdLoweredToMajor_AndOnlyAMajorIssueExists()
+    {
+        File.WriteAllText(Path.Combine(_root, "Example.cs"), """
+        public class Example
+        {
+            private int badlyNamedField;
+        }
+        """);
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+
+        ILanguageAnalyzer[] analyzers = { new Koduma.Analyzers.CSharp.CSharpAnalyzer() };
+
+        var exitCode = await AnalyzeCommand.Run(
+            new[] { "analyze", _root, "--fail-on", "minor" }, analyzers, Generators(), stdout, stderr);
+
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task Run_ReturnsTwo_AndPrintsCleanMessage_WhenFailOnSeverityIsUnrecognized()
+    {
+        File.WriteAllText(Path.Combine(_root, "ok.txt"), "nothing suspicious here");
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+
+        var exitCode = await AnalyzeCommand.Run(
+            new[] { "analyze", _root, "--fail-on", "bogus" }, Analyzers(), Generators(), stdout, stderr);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("bogus", stderr.ToString());
+        Assert.DoesNotContain("Exception", stderr.ToString());
+    }
 }

@@ -15,7 +15,14 @@ public static class AnalyzeCommand
         TextWriter stdout,
         TextWriter stderr)
     {
-        var (path, formats) = ParseArguments(args);
+        var (path, formats, failOnText) = ParseArguments(args);
+
+        var failOnThreshold = Severity.Critical;
+        if (failOnText is not null && !Enum.TryParse(failOnText, ignoreCase: true, out failOnThreshold))
+        {
+            stderr.WriteLine($"Unknown --fail-on severity '{failOnText}'.");
+            return 2;
+        }
 
         var unknownFormat = formats.FirstOrDefault(f => generators.All(g => g.Format != f));
         if (unknownFormat is not null)
@@ -50,14 +57,15 @@ public static class AnalyzeCommand
             stdout.WriteLine();
         }
 
-        var hasBlockerOrCritical = result.Issues.Any(i => i.Severity is Severity.Blocker or Severity.Critical);
-        return hasBlockerOrCritical ? 1 : 0;
+        var hasThresholdIssue = result.Issues.Any(i => i.Severity >= failOnThreshold);
+        return hasThresholdIssue ? 1 : 0;
     }
 
-    private static (string Path, List<string> Formats) ParseArguments(string[] args)
+    private static (string Path, List<string> Formats, string? FailOn) ParseArguments(string[] args)
     {
         string? path = null;
         var formats = new List<string> { "table" };
+        string? failOn = null;
 
         for (var i = 1; i < args.Length; i++)
         {
@@ -68,12 +76,19 @@ public static class AnalyzeCommand
                 continue;
             }
 
+            if (args[i] == "--fail-on")
+            {
+                if (i + 1 < args.Length)
+                    failOn = args[++i];
+                continue;
+            }
+
             if (args[i].StartsWith("--"))
                 continue;
 
             path ??= args[i];
         }
 
-        return (path ?? ".", formats);
+        return (path ?? ".", formats, failOn);
     }
 }
