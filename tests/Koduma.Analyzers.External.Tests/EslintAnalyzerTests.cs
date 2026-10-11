@@ -10,12 +10,17 @@ public class EslintAnalyzerTests
 
         public FakeRunner((int ExitCode, string StdOut, string StdErr) result) => _result = result;
 
-        public override Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments)
-            => Task.FromResult(_result);
+        public string? LastWorkingDirectory { get; private set; }
+
+        public override Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments, string? workingDirectory = null)
+        {
+            LastWorkingDirectory = workingDirectory;
+            return Task.FromResult(_result);
+        }
     }
 
     private static Task<Koduma.Core.Analysis.LanguageAnalysisResult> AnalyzeWith((int, string, string) result)
-        => new EslintAnalyzer(new FakeRunner(result)).AnalyzeAsync(new[] { "/repo/app.js" }, KodumaConfig.Default, CancellationToken.None);
+        => new EslintAnalyzer(new FakeRunner(result)).AnalyzeAsync("/repo", new[] { "/repo/app.js" }, KodumaConfig.Default, CancellationToken.None);
 
     [Fact]
     public async Task Analyze_ReportsError_WhenEslintExitsWithFatalCode()
@@ -43,5 +48,15 @@ public class EslintAnalyzerTests
 
         Assert.Null(result.Error);
         Assert.Empty(result.Issues);
+    }
+
+    [Fact]
+    public async Task Analyze_RunsEslintInProjectDirectory()
+    {
+        var runner = new FakeRunner((0, string.Empty, string.Empty));
+
+        await new EslintAnalyzer(runner).AnalyzeAsync("/some/project", new[] { "/some/project/app.js" }, KodumaConfig.Default, CancellationToken.None);
+
+        Assert.Equal("/some/project", runner.LastWorkingDirectory);
     }
 }

@@ -4,7 +4,7 @@ namespace Koduma.Analyzers.External;
 
 public class ExternalProcessRunner
 {
-    public virtual async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments)
+    public virtual async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments, string? workingDirectory = null)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -12,6 +12,7 @@ public class ExternalProcessRunner
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
+            WorkingDirectory = workingDirectory ?? string.Empty,
         };
 
         foreach (var arg in arguments)

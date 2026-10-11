@@ -10,5 +10,5 @@ public interface ILanguageAnalyzer
     bool AppliesToAllFiles { get; }
     IReadOnlyList<Rule> Rules { get; }
 
-    Task<LanguageAnalysisResult> AnalyzeAsync(IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken);
+    Task<LanguageAnalysisResult> AnalyzeAsync(string projectPath, IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken);
 }

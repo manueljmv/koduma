@@ -16,12 +16,12 @@ public class EslintAnalyzer : ILanguageAnalyzer
 
     public IReadOnlyList<Rule> Rules { get; } = Array.Empty<Rule>(); // ESLint's own rule set is dynamic/user-configured, not enumerable in advance.
 
-    public async Task<LanguageAnalysisResult> AnalyzeAsync(IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken)
+    public async Task<LanguageAnalysisResult> AnalyzeAsync(string projectPath, IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken)
     {
         var arguments = new List<string> { "--format", "json" };
         arguments.AddRange(filePaths);
 
-        var (exitCode, stdOut, stdErr) = await _runner.RunAsync("eslint", arguments);
+        var (exitCode, stdOut, stdErr) = await _runner.RunAsync("eslint", arguments, projectPath);
 
         if (exitCode == -1)
             return new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 0), Error: $"eslint could not be run: {stdErr}");

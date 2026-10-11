@@ -24,4 +24,27 @@ public class ExternalProcessRunnerTests
 
         Assert.NotEqual(0, exitCode);
     }
+
+    [Fact]
+    public async Task Run_UsesGivenWorkingDirectory()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var directory = Directory.CreateTempSubdirectory("koduma-cwd-").FullName;
+        try
+        {
+            var runner = new ExternalProcessRunner();
+
+            var (exitCode, stdOut, _) = await runner.RunAsync("pwd", Array.Empty<string>(), directory);
+
+            Assert.Equal(0, exitCode);
+            Assert.Equal(directory, stdOut.Trim());
+            Assert.NotEqual(Environment.CurrentDirectory, stdOut.Trim());
+        }
+        finally
+        {
+            Directory.Delete(directory);
+        }
+    }
 }

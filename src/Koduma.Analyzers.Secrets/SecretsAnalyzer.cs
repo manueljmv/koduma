@@ -22,7 +22,7 @@ public class SecretsAnalyzer : ILanguageAnalyzer
         ("Hardcoded password", new Regex(@"password\s*=\s*""[^""]{8,}""", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
     };
 
-    public Task<LanguageAnalysisResult> AnalyzeAsync(IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken)
+    public Task<LanguageAnalysisResult> AnalyzeAsync(string projectPath, IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken)
     {
         var issues = new List<IIssue>();
 

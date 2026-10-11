@@ -19,7 +19,7 @@ public class SecretsAnalyzerTests : IDisposable
         """);
 
         var analyzer = new SecretsAnalyzer();
-        var result = await analyzer.AnalyzeAsync(new[] { _file }, KodumaConfig.Default, CancellationToken.None);
+        var result = await analyzer.AnalyzeAsync(Path.GetDirectoryName(_file)!, new[] { _file }, KodumaConfig.Default, CancellationToken.None);
 
         Assert.Equal(2, result.Issues.Count);
         Assert.All(result.Issues, i => Assert.Equal("SEC-SECRET-001", i.RuleId));

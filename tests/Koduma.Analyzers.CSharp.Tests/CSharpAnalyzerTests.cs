@@ -35,7 +35,7 @@ public class CSharpAnalyzerTests : IDisposable
         """);
 
         var analyzer = new CSharpAnalyzer();
-        var result = await analyzer.AnalyzeAsync(new[] { _file }, KodumaConfig.Default, CancellationToken.None);
+        var result = await analyzer.AnalyzeAsync(Path.GetDirectoryName(_file)!, new[] { _file }, KodumaConfig.Default, CancellationToken.None);
 
         Assert.Contains(result.Issues, i => i.RuleId == "CS-NAMING-001" && i.Message.Contains("badlyNamedField"));
         Assert.Contains(result.Issues, i => i.RuleId == "CS-COMPLEXITY-001" && i.Message.Contains("Complex"));

@@ -32,7 +32,7 @@ public class AnalysisOrchestrator
 
             try
             {
-                var languageResult = await analyzer.AnalyzeAsync(filesForAnalyzer, config, cancellationToken);
+                var languageResult = await analyzer.AnalyzeAsync(projectPath, filesForAnalyzer, config, cancellationToken);
                 return (analyzer.Language, languageResult);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
