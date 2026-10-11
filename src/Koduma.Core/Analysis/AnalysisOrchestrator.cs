@@ -30,8 +30,15 @@ public class AnalysisOrchestrator
             if (filesForAnalyzer.Count == 0)
                 return (analyzer.Language, new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 0), Error: null));
 
-            var languageResult = await analyzer.AnalyzeAsync(filesForAnalyzer, config, cancellationToken);
-            return (analyzer.Language, languageResult);
+            try
+            {
+                var languageResult = await analyzer.AnalyzeAsync(filesForAnalyzer, config, cancellationToken);
+                return (analyzer.Language, languageResult);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return (analyzer.Language, new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 0), Error: ex.Message));
+            }
         });
 
         var perLanguageResults = await Task.WhenAll(tasks);

@@ -27,4 +27,29 @@ public class EslintOutputMapperTests
         Assert.Equal("javascript", issues[0].Language);
         Assert.Equal("/repo/app.js", issues[0].FilePath);
     }
+
+    [Fact]
+    public void Map_DefaultsLineAndColumnToOne_WhenMessageHasNoPosition()
+    {
+        const string eslintJson = """
+        [
+          {
+            "filePath": "/repo/.eslintrc.js",
+            "messages": [
+              { "fatal": false, "severity": 1, "message": "File ignored by default." }
+            ]
+          }
+        ]
+        """;
+
+        var issues = EslintOutputMapper.Map(eslintJson);
+
+        var issue = Assert.Single(issues);
+        Assert.Equal(1, issue.Line);
+        Assert.Equal(1, issue.Column);
+        Assert.Equal(1, issue.EndLine);
+        Assert.Equal(1, issue.EndColumn);
+        Assert.Equal("JS-unknown", issue.RuleId);
+        Assert.Equal("File ignored by default.", issue.Message);
+    }
 }

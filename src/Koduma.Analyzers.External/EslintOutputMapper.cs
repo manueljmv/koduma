@@ -17,8 +17,8 @@ public static class EslintOutputMapper
             foreach (var message in fileResult.GetProperty("messages").EnumerateArray())
             {
                 var eslintSeverity = message.GetProperty("severity").GetInt32();
-                var line = message.GetProperty("line").GetInt32();
-                var column = message.GetProperty("column").GetInt32();
+                var line = message.TryGetProperty("line", out var l) ? l.GetInt32() : 1;
+                var column = message.TryGetProperty("column", out var c) ? c.GetInt32() : 1;
                 var endLine = message.TryGetProperty("endLine", out var el) ? el.GetInt32() : line;
                 var endColumn = message.TryGetProperty("endColumn", out var ec) ? ec.GetInt32() : column;
                 var ruleId = message.TryGetProperty("ruleId", out var r) ? r.GetString() ?? "unknown" : "unknown";

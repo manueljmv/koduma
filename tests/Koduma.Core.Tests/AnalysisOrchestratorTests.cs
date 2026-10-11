@@ -100,4 +100,25 @@ public class AnalysisOrchestratorTests
         Assert.Equal("SEC-SECRET-001", result.Issues[0].RuleId);
         Assert.Equal(Severity.Blocker, result.Issues[0].Severity);
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_RecordsAnalysisError_WhenAnalyzerThrows_AndKeepsOtherLanguagesResults()
+    {
+        var throwingAnalyzer = new FakeAnalyzer("javascript", new[] { ".js" }, appliesToAll: false, _ =>
+            throw new KeyNotFoundException("line missing"));
+
+        var okIssue = new Issue("CS-X-001", Severity.Minor, Category.CodeSmell, "/repo/a.cs", 1, 1, 1, 1, "x", "csharp");
+        var okAnalyzer = new FakeAnalyzer("csharp", new[] { ".cs" }, appliesToAll: false, _ =>
+            new LanguageAnalysisResult(new IIssue[] { okIssue }, new AnalysisMetrics(5, 1, 0, 2), Error: null));
+
+        var orchestrator = new AnalysisOrchestrator(new ILanguageAnalyzer[] { throwingAnalyzer, okAnalyzer }, new FakeDiscovery());
+
+        var result = await orchestrator.AnalyzeAsync("/repo", KodumaConfig.Default);
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("javascript", error.Language);
+        Assert.Contains("line missing", error.Message);
+        Assert.Single(result.Issues);
+        Assert.Equal(5, result.Metrics.LinesOfCode);
+    }
 }
