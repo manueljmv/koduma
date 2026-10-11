@@ -1,0 +1,8 @@
+Koduma analysis of /sample/project (42 ms)
+Files analyzed: 4, LOC: 120
+
+[Minor] CS-NAMING-001 src/Foo.cs:10:5 — Field should be camelCase.
+[Critical] SEC-SECRET-001 config/secrets.txt:3:1 — Possible hardcoded secret (AWS access key).
+[ERROR] javascript: eslint could not be run: not found
+
+2 issues, 1 errors

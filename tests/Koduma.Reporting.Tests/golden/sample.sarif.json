@@ -1,0 +1,84 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "koduma",
+          "version": "0.1.0",
+          "rules": [
+            {
+              "id": "CS-NAMING-001"
+            },
+            {
+              "id": "SEC-SECRET-001"
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": false,
+          "toolExecutionNotifications": [
+            {
+              "level": "error",
+              "message": {
+                "text": "javascript: eslint could not be run: not found"
+              },
+              "properties": {
+                "language": "javascript"
+              }
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "CS-NAMING-001",
+          "level": "note",
+          "message": {
+            "text": "Field should be camelCase."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/Foo.cs"
+                },
+                "region": {
+                  "startLine": 10,
+                  "startColumn": 5,
+                  "endLine": 10,
+                  "endColumn": 20
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC-SECRET-001",
+          "level": "error",
+          "message": {
+            "text": "Possible hardcoded secret (AWS access key)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "config/secrets.txt"
+                },
+                "region": {
+                  "startLine": 3,
+                  "startColumn": 1,
+                  "endLine": 3,
+                  "endColumn": 30
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
