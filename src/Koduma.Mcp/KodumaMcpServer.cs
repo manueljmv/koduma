@@ -48,24 +48,39 @@ public static class KodumaMcpServer
         {
             var arguments = request.Params?.Arguments ?? new Dictionary<string, JsonElement>();
 
-            string payload = request.Params?.Name switch
+            try
             {
-                "analyze_project" => JsonSerializer.Serialize(
-                    await HandleAnalyzeProject(arguments, analyzers, ct),
-                    KodumaJsonContext.Default.AnalysisResult),
-                "list_rules" => JsonSerializer.Serialize(
-                    HandleListRules(arguments, analyzers),
-                    KodumaJsonContext.Default.RuleArray),
-                "get_capabilities" => JsonSerializer.Serialize(
-                    HandleGetCapabilities(analyzers),
-                    McpJsonContext.Default.McpCapabilities),
-                _ => throw new InvalidOperationException($"Unknown tool '{request.Params?.Name}'."),
-            };
+                string payload = request.Params?.Name switch
+                {
+                    "analyze_project" => JsonSerializer.Serialize(
+                        await HandleAnalyzeProject(arguments, analyzers, ct),
+                        KodumaJsonContext.Default.AnalysisResult),
+                    "list_rules" => JsonSerializer.Serialize(
+                        HandleListRules(arguments, analyzers),
+                        KodumaJsonContext.Default.RuleArray),
+                    "get_capabilities" => JsonSerializer.Serialize(
+                        HandleGetCapabilities(analyzers),
+                        McpJsonContext.Default.McpCapabilities),
+                    _ => throw new InvalidOperationException($"Unknown tool '{request.Params?.Name}'."),
+                };
 
-            return new CallToolResult
+                return new CallToolResult
+                {
+                    Content = new List<ContentBlock> { new TextContentBlock { Text = payload } },
+                };
+            }
+            catch (OperationCanceledException)
             {
-                Content = new List<ContentBlock> { new TextContentBlock { Text = payload } },
-            };
+                throw;
+            }
+            catch (KodumaConfigException ex)
+            {
+                return ToolError($"Invalid koduma.json: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return ToolError($"Tool '{request.Params?.Name}' failed: {ex.Message}");
+            }
         };
 
         await using var transport = new StdioServerTransport("koduma");
@@ -78,6 +93,12 @@ public static class KodumaMcpServer
         using var document = JsonDocument.Parse(json);
         return document.RootElement.Clone();
     }
+
+    private static CallToolResult ToolError(string message) => new()
+    {
+        IsError = true,
+        Content = new List<ContentBlock> { new TextContentBlock { Text = message } },
+    };
 
     private static async Task<AnalysisResult> HandleAnalyzeProject(
         IDictionary<string, JsonElement> arguments,
