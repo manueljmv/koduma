@@ -15,6 +15,12 @@ public class FileDiscoveryTests : IDisposable
 
     public void Dispose()
     {
+        foreach (var dir in Directory.EnumerateDirectories(_root, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 }).Append(_root))
+        {
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
         Directory.Delete(_root, recursive: true);
         Directory.Delete(_outside, recursive: true);
     }
@@ -63,5 +69,32 @@ public class FileDiscoveryTests : IDisposable
         Assert.DoesNotContain(files, f => f.EndsWith("secret.cs", StringComparison.Ordinal));
         Assert.Single(files);
         Assert.EndsWith("Program.cs", files[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DiscoverFiles_SkipsInaccessibleDirectory_AndReturnsReadableFiles()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        File.WriteAllText(Path.Combine(_root, "Program.cs"), "class P {}");
+        File.WriteAllText(Path.Combine(_root, ".hidden.cs"), "class H {}");
+        var locked = Path.Combine(_root, "locked");
+        Directory.CreateDirectory(locked);
+        File.WriteAllText(Path.Combine(locked, "inside.cs"), "class L {}");
+        File.SetUnixFileMode(locked, UnixFileMode.None);
+
+        var lockedIsReadable = true;
+        try { Directory.EnumerateFileSystemEntries(locked).ToList(); }
+        catch (UnauthorizedAccessException) { lockedIsReadable = false; }
+        if (lockedIsReadable)
+            return; // Running as root: permissions cannot be enforced, nothing to test.
+
+        var files = new FileDiscovery().DiscoverFiles(_root, KodumaConfig.Default);
+
+        var relative = files.Select(f => Path.GetRelativePath(_root, f).Replace('\\', '/')).ToHashSet();
+        Assert.Contains("Program.cs", relative);
+        Assert.Contains(".hidden.cs", relative);
+        Assert.DoesNotContain("locked/inside.cs", relative);
     }
 }

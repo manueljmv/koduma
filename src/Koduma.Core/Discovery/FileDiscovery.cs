@@ -12,6 +12,13 @@ public class FileDiscovery : IFileDiscovery
         ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".pdf", ".zip", ".dll", ".exe", ".so", ".dylib"
     };
 
+    private static readonly EnumerationOptions EnumerationOptions = new()
+    {
+        IgnoreInaccessible = true,
+        RecurseSubdirectories = false,
+        AttributesToSkip = 0,
+    };
+
     public IReadOnlyList<string> DiscoverFiles(string rootPath, KodumaConfig config)
     {
         var gitignorePatterns = LoadIgnorePatterns(Path.Combine(rootPath, ".gitignore"));
@@ -26,7 +33,7 @@ public class FileDiscovery : IFileDiscovery
 
     private static void CollectFiles(string rootPath, string directory, List<Regex> regexes, List<string> result)
     {
-        foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos())
+        foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos("*", EnumerationOptions))
         {
             if (entry.LinkTarget is not null)
                 continue;

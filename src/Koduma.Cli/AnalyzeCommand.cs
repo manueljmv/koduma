@@ -15,8 +15,20 @@ public static class AnalyzeCommand
         TextWriter stdout,
         TextWriter stderr)
     {
-        var path = args.Length > 1 && !args[1].StartsWith("--") ? args[1] : ".";
-        var formats = ParseFormats(args);
+        var (path, formats) = ParseArguments(args);
+
+        var unknownFormat = formats.FirstOrDefault(f => generators.All(g => g.Format != f));
+        if (unknownFormat is not null)
+        {
+            stderr.WriteLine($"Unknown format '{unknownFormat}'.");
+            return 2;
+        }
+
+        if (!Directory.Exists(path))
+        {
+            stderr.WriteLine($"Path not found or not a directory: {path}");
+            return 2;
+        }
 
         KodumaConfig config;
         try
@@ -32,34 +44,36 @@ public static class AnalyzeCommand
         var orchestrator = new AnalysisOrchestrator(analyzers, new FileDiscovery());
         var result = await orchestrator.AnalyzeAsync(path, config);
 
-        try
+        foreach (var format in formats)
         {
-            foreach (var format in formats)
-            {
-                var generator = generators.FirstOrDefault(g => g.Format == format)
-                    ?? throw new KodumaConfigException($"Unknown format '{format}'.");
-                generator.Write(result, stdout);
-                stdout.WriteLine();
-            }
-        }
-        catch (KodumaConfigException ex)
-        {
-            stderr.WriteLine(ex.Message);
-            return 2;
+            generators.First(g => g.Format == format).Write(result, stdout);
+            stdout.WriteLine();
         }
 
         var hasBlockerOrCritical = result.Issues.Any(i => i.Severity is Severity.Blocker or Severity.Critical);
         return hasBlockerOrCritical ? 1 : 0;
     }
 
-    private static List<string> ParseFormats(string[] args)
+    private static (string Path, List<string> Formats) ParseArguments(string[] args)
     {
-        for (var i = 0; i < args.Length; i++)
+        string? path = null;
+        var formats = new List<string> { "table" };
+
+        for (var i = 1; i < args.Length; i++)
         {
-            if (args[i] == "--format" && i + 1 < args.Length)
-                return args[i + 1].Split(',').ToList();
+            if (args[i] == "--format")
+            {
+                if (i + 1 < args.Length)
+                    formats = args[++i].Split(',').ToList();
+                continue;
+            }
+
+            if (args[i].StartsWith("--"))
+                continue;
+
+            path ??= args[i];
         }
 
-        return new List<string> { "table" };
+        return (path ?? ".", formats);
     }
 }
