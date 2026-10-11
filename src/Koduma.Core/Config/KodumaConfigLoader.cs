@@ -36,9 +36,15 @@ public static class KodumaConfigLoader
         {
             foreach (var entry in excludeArray)
             {
-                if (entry?.GetValue<string>() is { } pattern)
+                if (entry is JsonValue value && value.TryGetValue<string>(out var pattern))
                     exclude.Add(pattern);
+                else
+                    throw new KodumaConfigException($"exclude: expected a string entry, got '{entry?.ToJsonString() ?? "null"}'.");
             }
+        }
+        else if (root?["exclude"] is { } nonArrayExclude)
+        {
+            throw new KodumaConfigException($"exclude: expected an array, got '{nonArrayExclude.ToJsonString()}'.");
         }
 
         return new KodumaConfig(rules, exclude);

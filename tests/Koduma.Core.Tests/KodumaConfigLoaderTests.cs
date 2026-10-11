@@ -47,6 +47,26 @@ public class KodumaConfigLoaderTests : IDisposable
     }
 
     [Fact]
+    public void LoadOrDefault_Throws_WhenExcludeEntryIsNotAString()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "exclude": [1] }
+        """);
+
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root));
+    }
+
+    [Fact]
+    public void LoadOrDefault_Throws_WhenExcludeIsNotAnArray()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "exclude": "**/bin/**" }
+        """);
+
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root));
+    }
+
+    [Fact]
     public void LoadOrDefault_Throws_WhenRuleOverrideShapeIsInvalid()
     {
         File.WriteAllText(Path.Combine(_root, "koduma.json"), """
