@@ -36,7 +36,7 @@ public class EslintAnalyzer : ILanguageAnalyzer
             return new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 0), Error: $"eslint exited with code {exitCode}: {stdErr}");
 
         if (string.IsNullOrWhiteSpace(stdOut))
-            return new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, filePaths.Count), Error: null);
+            return new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 0), Error: $"eslint produced no output (exit code {exitCode}); treating as a failed run rather than a clean one.");
 
         var issues = EslintOutputMapper.Map(stdOut);
         return new LanguageAnalysisResult(issues, new AnalysisMetrics(0, 0, 0, filePaths.Count), Error: null);

@@ -64,6 +64,7 @@ public class ExternalProcessRunner
                 return (-1, string.Empty, lengthError);
 
             startInfo.FileName = shell;
+            startInfo.Environment["NoDefaultCurrentDirectoryInExePath"] = "1";
             startInfo.Arguments = fullArguments;
         }
         else

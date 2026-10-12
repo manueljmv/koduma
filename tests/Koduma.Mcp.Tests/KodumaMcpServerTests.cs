@@ -196,7 +196,7 @@ public class KodumaMcpServerTests : IDisposable
         IReportGenerator[] generators = { new TableReportGenerator(), new JsonReportGenerator() };
 
         var output = await KodumaMcpServer.HandleAnalyzeProject(
-            Args($$"""{"path": "{{_root}}", "format": "table"}"""), analyzers, generators, _root, CancellationToken.None);
+            Args($$"""{"path": {{JsonSerializer.Serialize(_root)}}, "format": "table"}"""), analyzers, generators, _root, CancellationToken.None);
 
         Assert.Contains("[Critical] SEC-SECRET-001", output);
         Assert.DoesNotContain("\"Severity\"", output);
@@ -211,7 +211,7 @@ public class KodumaMcpServerTests : IDisposable
         IReportGenerator[] generators = { new JsonReportGenerator() };
 
         var output = await KodumaMcpServer.HandleAnalyzeProject(
-            Args($$$"""{"path": "{{{_root}}}", "rules_config": {"SEC-SECRET-001": "off"}}"""), analyzers, generators, _root, CancellationToken.None);
+            Args($$$"""{"path": {{{JsonSerializer.Serialize(_root)}}}, "rules_config": {"SEC-SECRET-001": "off"}}"""), analyzers, generators, _root, CancellationToken.None);
 
         using var document = JsonDocument.Parse(output);
         Assert.Equal(0, document.RootElement.GetProperty("Issues").GetArrayLength());
@@ -220,8 +220,9 @@ public class KodumaMcpServerTests : IDisposable
     [Fact]
     public void IsWithinRoot_CaseSensitivityMatchesPlatform()
     {
-        var result = KodumaMcpServer.IsWithinRoot("/ROOT/sub", "/root");
+        var root = Path.Combine(Path.GetTempPath(), "root");
+        var upper = Path.Combine(Path.GetTempPath(), "ROOT", "sub");
 
-        Assert.Equal(OperatingSystem.IsWindows(), result);
+        Assert.Equal(OperatingSystem.IsWindows(), KodumaMcpServer.IsWithinRoot(upper, root));
     }
 }

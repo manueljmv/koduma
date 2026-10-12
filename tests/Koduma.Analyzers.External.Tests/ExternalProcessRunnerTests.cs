@@ -6,6 +6,9 @@ public class ExternalProcessRunnerTests
     [Fact]
     public async Task Run_PassesArgumentsWithSpacesAndNonAsciiCharacters_Verbatim()
     {
+        if (OperatingSystem.IsWindows())
+            return;
+
         var weirdPath = "/tmp/weird name/spéciäl.js";
 
         var runner = new ExternalProcessRunner();

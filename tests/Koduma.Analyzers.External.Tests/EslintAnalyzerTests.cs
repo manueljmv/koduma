@@ -33,20 +33,22 @@ public class EslintAnalyzerTests
     }
 
     [Fact]
-    public async Task Analyze_ReportsNoError_WhenEslintExitsOneWithEmptyOutput()
+    public async Task Analyze_ReportsError_WhenEslintExitsOneWithEmptyOutput()
     {
         var result = await AnalyzeWith((1, string.Empty, string.Empty));
 
-        Assert.Null(result.Error);
+        Assert.NotNull(result.Error);
+        Assert.Contains("no output", result.Error);
         Assert.Empty(result.Issues);
     }
 
     [Fact]
-    public async Task Analyze_ReportsNoError_WhenEslintExitsZeroWithEmptyOutput()
+    public async Task Analyze_ReportsError_WhenEslintExitsZeroWithEmptyOutput()
     {
         var result = await AnalyzeWith((0, string.Empty, string.Empty));
 
-        Assert.Null(result.Error);
+        Assert.NotNull(result.Error);
+        Assert.Contains("no output", result.Error);
         Assert.Empty(result.Issues);
     }
 
