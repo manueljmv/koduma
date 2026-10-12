@@ -4,15 +4,21 @@ namespace Koduma.Analyzers.External;
 
 public class ExternalProcessRunner
 {
+    internal const int CmdCommandLineLimit = 8191;
+
     internal static bool IsCmdShim(string executable) =>
         executable.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) || executable.EndsWith(".bat", StringComparison.OrdinalIgnoreCase);
 
     internal static string? FindUnsafeArgument(IReadOnlyList<string> arguments) =>
-        arguments.FirstOrDefault(a => a.IndexOfAny(new[] { '&', '|', '^', '%', '<', '>', '(', ')', '"', '!' }) >= 0);
+        arguments.FirstOrDefault(a => a.IndexOfAny(new[] { '&', '|', '^', '%', '<', '>', '(', ')', '"', '!', '\r', '\n', '\0' }) >= 0);
 
-    internal static string ResolveCmdExecutable() =>
-        Environment.GetEnvironmentVariable("ComSpec")
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+    internal static string ResolveCmdExecutable()
+    {
+        var comSpec = Environment.GetEnvironmentVariable("ComSpec");
+        return string.IsNullOrEmpty(comSpec)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe")
+            : comSpec;
+    }
 
     internal static (string Executable, IReadOnlyList<string> Arguments) RerouteThroughCmd(string executable, IReadOnlyList<string> arguments)
     {
@@ -20,6 +26,16 @@ public class ExternalProcessRunner
         parts.AddRange(arguments);
         var commandLine = "\"" + string.Join(" ", parts.Select(p => "\"" + p + "\"")) + "\"";
         return (ResolveCmdExecutable(), new[] { "/d", "/s", "/c", commandLine });
+    }
+
+    internal static string? CheckCommandLineLength(IReadOnlyList<string> arguments, string fullCommandLine)
+    {
+        if (fullCommandLine.Length <= CmdCommandLineLimit)
+            return null;
+
+        return $"Command line for cmd.exe would be {fullCommandLine.Length} characters across {arguments.Count} arguments, " +
+               $"exceeding cmd.exe's {CmdCommandLineLimit}-character limit; the command was not run. " +
+               "Reduce the number of files analyzed in a single invocation.";
     }
 
     public virtual async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments, string? workingDirectory = null)
@@ -40,9 +56,15 @@ public class ExternalProcessRunner
                 return (-1, string.Empty, $"Argument '{unsafeArg}' contains a character unsafe to pass through cmd.exe and was rejected.");
 
             var (shell, shellArgs) = RerouteThroughCmd(executable, arguments);
-            startInfo.FileName = shell;
             // Raw Arguments, not ArgumentList: ArgumentList escapes '"' as '\"', which cmd.exe does not understand.
-            startInfo.Arguments = string.Join(" ", shellArgs);
+            var fullArguments = string.Join(" ", shellArgs);
+
+            var lengthError = CheckCommandLineLength(arguments, fullArguments);
+            if (lengthError is not null)
+                return (-1, string.Empty, lengthError);
+
+            startInfo.FileName = shell;
+            startInfo.Arguments = fullArguments;
         }
         else
         {
