@@ -9,6 +9,7 @@ public class KodumaMcpServerTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "koduma-mcp-" + Guid.NewGuid());
     private readonly List<string> _extraTempDirs = new();
+    private readonly List<string> _extraSymlinks = new();
 
     public KodumaMcpServerTests() => Directory.CreateDirectory(_root);
 
@@ -17,6 +18,8 @@ public class KodumaMcpServerTests : IDisposable
         Directory.Delete(_root, recursive: true);
         foreach (var dir in _extraTempDirs)
             Directory.Delete(dir, recursive: true);
+        foreach (var symlink in _extraSymlinks)
+            File.Delete(symlink);
     }
 
     private static IReadOnlyDictionary<string, JsonElement> Args(string json)
@@ -68,6 +71,39 @@ public class KodumaMcpServerTests : IDisposable
         var resolved = KodumaMcpServer.ResolveAndValidatePath("subdir", rootWithTrailingSeparator);
 
         Assert.Equal(Path.GetFullPath(subdirectory), resolved);
+    }
+
+    [Fact]
+    public void ResolveAndValidatePath_Throws_WhenSymlinkIsAnIntermediatePathComponent()
+    {
+        var outside = Path.Combine(Path.GetTempPath(), "koduma-mcp-outside-" + Guid.NewGuid());
+        Directory.CreateDirectory(outside);
+        _extraTempDirs.Add(outside);
+        File.WriteAllText(Path.Combine(outside, "secret.txt"), "x");
+
+        var linkPath = Path.Combine(_root, "escape-link");
+        Directory.CreateSymbolicLink(linkPath, outside);
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            KodumaMcpServer.ResolveAndValidatePath(Path.Combine("escape-link", "secret.txt"), _root));
+
+        Assert.Contains("outside the configured root", ex.Message);
+    }
+
+    [Fact]
+    public void ResolveAndValidatePath_Allows_DefaultPath_WhenRootItselfIsASymlink()
+    {
+        var realRootTarget = Path.Combine(Path.GetTempPath(), "koduma-mcp-realroot-" + Guid.NewGuid());
+        Directory.CreateDirectory(realRootTarget);
+        _extraTempDirs.Add(realRootTarget);
+
+        var symlinkedRoot = Path.Combine(Path.GetTempPath(), "koduma-mcp-symlinked-root-" + Guid.NewGuid());
+        Directory.CreateSymbolicLink(symlinkedRoot, realRootTarget);
+        _extraSymlinks.Add(symlinkedRoot);
+
+        var resolved = KodumaMcpServer.ResolveAndValidatePath(".", symlinkedRoot);
+
+        Assert.Equal(Path.GetFullPath(symlinkedRoot), resolved);
     }
 
     [Fact]

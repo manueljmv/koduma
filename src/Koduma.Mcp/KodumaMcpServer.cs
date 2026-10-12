@@ -108,14 +108,35 @@ public static class KodumaMcpServer
         var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
         var fullPath = Path.GetFullPath(path, fullRoot);
 
-        var resolved = (File.Exists(fullPath) || Directory.Exists(fullPath))
-            ? File.ResolveLinkTarget(fullPath, returnFinalTarget: true)?.FullName
-            : null;
+        var canonicalRoot = Canonicalize(fullRoot);
+        var canonicalPath = Canonicalize(fullPath);
 
-        if (!IsWithinRoot(fullPath, fullRoot) || (resolved is not null && !IsWithinRoot(resolved, fullRoot)))
+        if (!IsWithinRoot(canonicalPath, canonicalRoot))
             throw new InvalidOperationException($"Path '{path}' is outside the configured root '{root}'.");
 
         return fullPath;
+    }
+
+    private static string Canonicalize(string path)
+    {
+        var pathRoot = Path.GetPathRoot(path) ?? Path.DirectorySeparatorChar.ToString();
+        var segments = path.Substring(pathRoot.Length).Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        var current = pathRoot.TrimEnd(Path.DirectorySeparatorChar);
+        if (current.Length == 0)
+            current = Path.DirectorySeparatorChar.ToString();
+
+        foreach (var segment in segments)
+        {
+            current = Path.Combine(current, segment);
+            if (File.Exists(current) || Directory.Exists(current))
+            {
+                var target = File.ResolveLinkTarget(current, returnFinalTarget: true);
+                if (target is not null)
+                    current = target.FullName;
+            }
+        }
+
+        return current;
     }
 
     private static bool IsWithinRoot(string candidate, string fullRoot) =>
