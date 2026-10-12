@@ -10,12 +10,16 @@ public class ExternalProcessRunner
     internal static string? FindUnsafeArgument(IReadOnlyList<string> arguments) =>
         arguments.FirstOrDefault(a => a.IndexOfAny(new[] { '&', '|', '^', '%', '<', '>', '(', ')', '"', '!' }) >= 0);
 
+    internal static string ResolveCmdExecutable() =>
+        Environment.GetEnvironmentVariable("ComSpec")
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+
     internal static (string Executable, IReadOnlyList<string> Arguments) RerouteThroughCmd(string executable, IReadOnlyList<string> arguments)
     {
         var parts = new List<string> { executable };
         parts.AddRange(arguments);
         var commandLine = "\"" + string.Join(" ", parts.Select(p => "\"" + p + "\"")) + "\"";
-        return ("cmd.exe", new[] { "/d", "/s", "/c", commandLine });
+        return (ResolveCmdExecutable(), new[] { "/d", "/s", "/c", commandLine });
     }
 
     public virtual async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments, string? workingDirectory = null)

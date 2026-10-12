@@ -44,7 +44,17 @@ public class ExternalProcessRunnerWindowsRoutingTests
     {
         var (executable, arguments) = ExternalProcessRunner.RerouteThroughCmd("eslint.cmd", new[] { "--format", "json" });
 
-        Assert.Equal("cmd.exe", executable);
+        Assert.EndsWith("cmd.exe", executable);
         Assert.Equal(new[] { "/d", "/s", "/c", "\"\"eslint.cmd\" \"--format\" \"json\"\"" }, arguments);
+    }
+
+    // Linux-only fallback: the ComSpec branch is Windows-only and is not covered here.
+    [Fact]
+    public void ResolveCmdExecutable_FallsBackToCmdExeFileName_WhenComSpecUnset()
+    {
+        var resolved = ExternalProcessRunner.ResolveCmdExecutable();
+
+        Assert.False(string.IsNullOrEmpty(resolved));
+        Assert.EndsWith("cmd.exe", resolved);
     }
 }
