@@ -18,7 +18,7 @@ Una revisión de la base de código (a petición del usuario, no derivada de nin
 - Lógica de "skip" automático en los tests que requieren symlinks — es una responsabilidad del entorno, no del código de test.
 - Verificación real en una máquina Windows: todo lo de abajo se implementa y se razona por inspección de código desde este entorno Linux; no hay manera de ejecutar/confirmar empíricamente el comportamiento real en Windows desde aquí. Esto se señala explícitamente donde aplica.
 
-## 1. Resolución del ejecutable de ESLint
+## 1. Resolución del ejecutable de ESLint (y su invocación segura en Windows)
 
 `EslintAnalyzer` invoca hoy el proceso `"eslint"` directamente. En Windows, npm instala los CLIs como scripts `.cmd` (`eslint.cmd`), y `Process.Start` con `UseShellExecute = false` no resuelve extensiones de shim a partir del nombre desnudo — un problema conocido al invocar herramientas de Node desde .NET en Windows.
 
@@ -29,6 +29,28 @@ private static readonly string EslintExecutable = ResolveEslintExecutable(Operat
 ```
 
 El método se expone como `internal static` (no `private`) específicamente para que un test pueda llamarlo con un valor fijo de `isWindows` y verificar la lógica de forma determinista, sin depender de en qué sistema operativo corre realmente la suite — necesita `InternalsVisibleTo` hacia el proyecto de test.
+
+**Corrección posterior (importante):** resolver el nombre a `eslint.cmd` no basta. Con `UseShellExecute = false`, Windows no puede lanzar un `.cmd`/`.bat` directamente (`CreateProcess` los rechaza, no son un ejecutable Win32 válido) — hace falta enrutar explícitamente por `cmd.exe`. Pero `cmd.exe` reinterpreta su línea de comandos con su propia gramática (`&`, `|`, `^`, `%`, paréntesis, comillas), y el escapado a nivel de `ArgumentList` de .NET (correcto para invocar un proceso directamente) no protege contra esa segunda capa de interpretación del shell. Investigación sobre cómo resuelven esto otros runtimes (Rust, Go, OpenJDK, PHP) confirma que es un problema de doble escapado sin solución perfecta conocida — Rust documenta explícitamente que puede no ser posible escapar con seguridad algunos caracteres, y una librería dedicada a esto (`shescape`) tuvo una vulnerabilidad real por un paréntesis sin escapar.
+
+**Decisión:** en vez de intentar escapar todo, `ExternalProcessRunner` rechaza con un error claro cualquier argumento que contenga un carácter especial de cmd.exe (`& | ^ % < > ( ) "`) antes de enrutar por el shell, y solo si ningún argumento lo contiene, invoca `cmd.exe /d /s /c "<comando entre comillas>"` (el patrón `/s` + comillas dobles envolventes documentado como la mitigación estándar, no como una garantía absoluta). Esto solo se activa en Windows y solo cuando el ejecutable termina en `.cmd`/`.bat` — en Linux/macOS el comportamiento no cambia (sigue siendo invocación directa sin shell, sin riesgo de inyección). El riesgo residual (algún caso límite de cmd.exe no cubierto por esta lista) queda documentado aquí, en la misma categoría que el TOCTOU/magic-link del servidor MCP: mitigado con la práctica estándar conocida, no eliminado con una garantía matemática.
+
+```csharp
+internal static bool IsCmdShim(string executable) =>
+    executable.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) || executable.EndsWith(".bat", StringComparison.OrdinalIgnoreCase);
+
+internal static string? FindUnsafeArgument(IReadOnlyList<string> arguments) =>
+    arguments.FirstOrDefault(a => a.IndexOfAny(new[] { '&', '|', '^', '%', '<', '>', '(', ')', '"' }) >= 0);
+
+internal static (string Executable, IReadOnlyList<string> Arguments) RerouteThroughCmd(string executable, IReadOnlyList<string> arguments)
+{
+    var parts = new List<string> { executable };
+    parts.AddRange(arguments);
+    var commandLine = "\"" + string.Join(" ", parts.Select(p => "\"" + p + "\"")) + "\"";
+    return ("cmd.exe", new[] { "/d", "/s", "/c", commandLine });
+}
+```
+
+`RunAsync` llama a `FindUnsafeArgument` antes de `RerouteThroughCmd`, y solo cuando `OperatingSystem.IsWindows() && IsCmdShim(executable)`. Como `"` está en la lista de caracteres rechazados, ningún argumento que llegue a `RerouteThroughCmd` puede contener comillas, así que no hace falta duplicar comillas internas al construir la línea de comandos.
 
 ## 2. Portabilidad en `KodumaMcpServer.cs`
 
