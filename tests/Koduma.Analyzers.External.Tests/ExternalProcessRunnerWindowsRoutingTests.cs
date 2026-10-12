@@ -23,6 +23,7 @@ public class ExternalProcessRunnerWindowsRoutingTests
     [InlineData("a(b")]
     [InlineData("a)b")]
     [InlineData("a\"b")]
+    [InlineData("a!b")]
     public void FindUnsafeArgument_ReturnsArgumentContainingDenylistedCharacter(string unsafeArg)
     {
         var arguments = new[] { "--format", "json", unsafeArg };
