@@ -119,24 +119,54 @@ public static class KodumaMcpServer
 
     private static string Canonicalize(string path)
     {
-        var pathRoot = Path.GetPathRoot(path) ?? Path.DirectorySeparatorChar.ToString();
-        var segments = path.Substring(pathRoot.Length).Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
-        var current = pathRoot.TrimEnd(Path.DirectorySeparatorChar);
-        if (current.Length == 0)
-            current = Path.DirectorySeparatorChar.ToString();
+        var remaining = new Stack<string>(SplitSegments(path).Reverse());
+        var resolved = GetRoot(path);
+        var linkHops = 0;
 
-        foreach (var segment in segments)
+        while (remaining.Count > 0)
         {
-            current = Path.Combine(current, segment);
-            if (File.Exists(current) || Directory.Exists(current))
+            var segment = remaining.Pop();
+            if (segment == ".")
+                continue;
+            if (segment == "..")
             {
-                var target = File.ResolveLinkTarget(current, returnFinalTarget: true);
-                if (target is not null)
-                    current = target.FullName;
+                resolved = Path.GetDirectoryName(resolved) ?? resolved;
+                continue;
             }
+
+            var candidate = Path.Combine(resolved, segment);
+            if (File.Exists(candidate) || Directory.Exists(candidate))
+            {
+                var target = File.ResolveLinkTarget(candidate, returnFinalTarget: false);
+                if (target is not null)
+                {
+                    if (++linkHops > 40)
+                        throw new InvalidOperationException($"Too many levels of symbolic links resolving '{path}'.");
+
+                    resolved = GetRoot(target.FullName);
+                    foreach (var seg in SplitSegments(target.FullName).Reverse())
+                        remaining.Push(seg);
+                    continue;
+                }
+            }
+
+            resolved = candidate;
         }
 
-        return current;
+        return resolved;
+    }
+
+    private static string GetRoot(string path)
+    {
+        var root = Path.GetPathRoot(path) ?? Path.DirectorySeparatorChar.ToString();
+        var trimmed = root.TrimEnd(Path.DirectorySeparatorChar);
+        return trimmed.Length == 0 ? Path.DirectorySeparatorChar.ToString() : trimmed;
+    }
+
+    private static IEnumerable<string> SplitSegments(string path)
+    {
+        var root = Path.GetPathRoot(path) ?? Path.DirectorySeparatorChar.ToString();
+        return path.Substring(root.Length).Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
     }
 
     private static bool IsWithinRoot(string candidate, string fullRoot) =>

@@ -107,6 +107,29 @@ public class KodumaMcpServerTests : IDisposable
     }
 
     [Fact]
+    public void ResolveAndValidatePath_Throws_WhenChainedSymlinksEscapeRoot()
+    {
+        var outside = Path.Combine(Path.GetTempPath(), "koduma-mcp-outside-" + Guid.NewGuid());
+        var outsideSubdirectory = Path.Combine(outside, "x");
+        Directory.CreateDirectory(outsideSubdirectory);
+        _extraTempDirs.Add(outside);
+        File.WriteAllText(Path.Combine(outsideSubdirectory, "secret.txt"), "x");
+
+        // l2 -> /outside (absolute, escapes root)
+        var l2 = Path.Combine(_root, "l2");
+        Directory.CreateSymbolicLink(l2, outside);
+
+        // l1 -> l2/x (relative, resolves through l2 which is itself a symlink)
+        var l1 = Path.Combine(_root, "l1");
+        Directory.CreateSymbolicLink(l1, Path.Combine("l2", "x"));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            KodumaMcpServer.ResolveAndValidatePath(Path.Combine("l1", "secret.txt"), _root));
+
+        Assert.Contains("outside the configured root", ex.Message);
+    }
+
+    [Fact]
     public async Task HandleAnalyzeProject_UsesRequestedFormat_InsteadOfJson()
     {
         File.WriteAllText(Path.Combine(_root, "secret.txt"), "password = \"SuperSecret123!\"");
