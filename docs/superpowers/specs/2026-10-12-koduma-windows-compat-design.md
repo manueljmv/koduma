@@ -32,25 +32,51 @@ El método se expone como `internal static` (no `private`) específicamente para
 
 **Corrección posterior (importante):** resolver el nombre a `eslint.cmd` no basta. Con `UseShellExecute = false`, Windows no puede lanzar un `.cmd`/`.bat` directamente (`CreateProcess` los rechaza, no son un ejecutable Win32 válido) — hace falta enrutar explícitamente por `cmd.exe`. Pero `cmd.exe` reinterpreta su línea de comandos con su propia gramática (`&`, `|`, `^`, `%`, paréntesis, comillas), y el escapado a nivel de `ArgumentList` de .NET (correcto para invocar un proceso directamente) no protege contra esa segunda capa de interpretación del shell. Investigación sobre cómo resuelven esto otros runtimes (Rust, Go, OpenJDK, PHP) confirma que es un problema de doble escapado sin solución perfecta conocida — Rust documenta explícitamente que puede no ser posible escapar con seguridad algunos caracteres, y una librería dedicada a esto (`shescape`) tuvo una vulnerabilidad real por un paréntesis sin escapar.
 
-**Decisión:** en vez de intentar escapar todo, `ExternalProcessRunner` rechaza con un error claro cualquier argumento que contenga un carácter especial de cmd.exe (`& | ^ % < > ( ) "`) antes de enrutar por el shell, y solo si ningún argumento lo contiene, invoca `cmd.exe /d /s /c "<comando entre comillas>"` (el patrón `/s` + comillas dobles envolventes documentado como la mitigación estándar, no como una garantía absoluta). Esto solo se activa en Windows y solo cuando el ejecutable termina en `.cmd`/`.bat` — en Linux/macOS el comportamiento no cambia (sigue siendo invocación directa sin shell, sin riesgo de inyección). El riesgo residual (algún caso límite de cmd.exe no cubierto por esta lista) queda documentado aquí, en la misma categoría que el TOCTOU/magic-link del servidor MCP: mitigado con la práctica estándar conocida, no eliminado con una garantía matemática.
+**Decisión:** en vez de intentar escapar todo, `ExternalProcessRunner` rechaza con un error claro cualquier argumento que contenga un carácter especial de cmd.exe (`& | ^ % < > ( ) " ! \r \n \0`) antes de enrutar por el shell, y solo si ningún argumento lo contiene, invoca `cmd.exe /d /s /c "<comando entre comillas>"` (el patrón `/s` + comillas dobles envolventes documentado como la mitigación estándar, no como una garantía absoluta). Esto solo se activa en Windows y solo cuando el ejecutable termina en `.cmd`/`.bat` — en Linux/macOS el comportamiento no cambia (sigue siendo invocación directa sin shell, sin riesgo de inyección). El riesgo residual (algún caso límite de cmd.exe no cubierto por esta lista) queda documentado aquí, en la misma categoría que el TOCTOU/magic-link del servidor MCP: mitigado con la práctica estándar conocida, no eliminado con una garantía matemática.
+
+Consecuencia práctica aceptada de esta lista negra: rechaza también rutas legítimas de Windows que contengan paréntesis o `&` (p. ej. `C:\Users\Jo (Work)\repo`). Es un trade-off deliberado del usuario — preferir un falso rechazo seguro sobre un escapado parcial — y no se reabre en esta ronda.
+
+`cmd.exe` se resuelve vía `ComSpec` en vez de con el nombre desnudo `"cmd.exe"`: con `UseShellExecute = false`, `CreateProcess` busca primero en el directorio de trabajo (el repo bajo análisis) antes que en `PATH`/`System32`, así que un nombre desnudo es plantable (binary planting) por un archivo `cmd.exe` colocado en el repo. `ComSpec` normalmente contiene la ruta absoluta de confianza (`C:\Windows\system32\cmd.exe`); si está vacío o sin definir, se cae a construir esa misma ruta desde `Environment.SpecialFolder.System`.
 
 ```csharp
+internal const int CmdCommandLineLimit = 8191;
+
 internal static bool IsCmdShim(string executable) =>
     executable.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) || executable.EndsWith(".bat", StringComparison.OrdinalIgnoreCase);
 
 internal static string? FindUnsafeArgument(IReadOnlyList<string> arguments) =>
-    arguments.FirstOrDefault(a => a.IndexOfAny(new[] { '&', '|', '^', '%', '<', '>', '(', ')', '"' }) >= 0);
+    arguments.FirstOrDefault(a => a.IndexOfAny(new[] { '&', '|', '^', '%', '<', '>', '(', ')', '"', '!', '\r', '\n', '\0' }) >= 0);
+
+internal static string ResolveCmdExecutable()
+{
+    var comSpec = Environment.GetEnvironmentVariable("ComSpec");
+    return string.IsNullOrEmpty(comSpec)
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe")
+        : comSpec;
+}
 
 internal static (string Executable, IReadOnlyList<string> Arguments) RerouteThroughCmd(string executable, IReadOnlyList<string> arguments)
 {
     var parts = new List<string> { executable };
     parts.AddRange(arguments);
     var commandLine = "\"" + string.Join(" ", parts.Select(p => "\"" + p + "\"")) + "\"";
-    return ("cmd.exe", new[] { "/d", "/s", "/c", commandLine });
+    return (ResolveCmdExecutable(), new[] { "/d", "/s", "/c", commandLine });
+}
+
+internal static string? CheckCommandLineLength(IReadOnlyList<string> arguments, string fullCommandLine)
+{
+    if (fullCommandLine.Length <= CmdCommandLineLimit)
+        return null;
+
+    return $"Command line for cmd.exe would be {fullCommandLine.Length} characters across {arguments.Count} arguments, " +
+           $"exceeding cmd.exe's {CmdCommandLineLimit}-character limit; the command was not run. " +
+           "Reduce the number of files analyzed in a single invocation.";
 }
 ```
 
 `RunAsync` llama a `FindUnsafeArgument` antes de `RerouteThroughCmd`, y solo cuando `OperatingSystem.IsWindows() && IsCmdShim(executable)`. Como `"` está en la lista de caracteres rechazados, ningún argumento que llegue a `RerouteThroughCmd` puede contener comillas, así que no hace falta duplicar comillas internas al construir la línea de comandos.
+
+**Límite de longitud de la línea de comandos de cmd.exe.** Cuando se enruta por `cmd.exe`, todos los argumentos (en el caso de ESLint, todas las rutas de archivo a analizar) viajan en una sola cadena `/c "<comando>"`, a diferencia del camino normal (`ArgumentList`), que no tiene este límite práctico. `cmd.exe` tiene un límite documentado de ~8191 caracteres en su línea de comandos; un repositorio con suficientes archivos JS/TS (del orden de 130+ con rutas absolutas típicas) puede superarlo. Si eso ocurriera sin detección, el fallo del proceso podría manifestarse de forma indistinguible de "ESLint corrió y no encontró problemas" ante el manejo de código de salida de `EslintAnalyzer` — el peor modo de fallo posible para una herramienta de calidad de código. Por eso `RunAsync` calcula la línea de comandos completa y, antes de invocar `Process.Start`, llama a `CheckCommandLineLength`: si excede el límite, devuelve `(-1, "", <mensaje>)` sin intentar la invocación, convirtiendo un posible fallo silencioso en un `AnalysisError` visible y reportable. Resolver el problema de fondo (repos grandes que no caben en una sola invocación) — por ejemplo, dividiendo la llamada a ESLint en varios lotes — queda fuera de alcance de esta ronda; es una decisión de diseño real que corresponde al usuario, no algo para resolver implícitamente aquí.
 
 ## 2. Portabilidad en `KodumaMcpServer.cs`
 
