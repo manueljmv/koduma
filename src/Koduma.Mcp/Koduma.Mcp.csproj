@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Koduma.Core\Koduma.Core.csproj" />
+    <ProjectReference Include="..\Koduma.Reporting\Koduma.Reporting.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -30,7 +30,7 @@ return args[0] switch
 {
     "analyze" => await AnalyzeCommand.Run(args, analyzers, generators, Console.Out, Console.Error),
     "rules" => RulesCommand.Run(analyzers, Console.Out),
-    "mcp-serve" => await RunMcpServe(analyzers),
+    "mcp-serve" => await RunMcpServe(analyzers, generators, args),
     _ => Unknown(args[0]),
 };
 
@@ -40,8 +40,20 @@ static int Unknown(string command)
     return 2;
 }
 
-static async Task<int> RunMcpServe(ILanguageAnalyzer[] analyzers)
+static async Task<int> RunMcpServe(ILanguageAnalyzer[] analyzers, IReportGenerator[] generators, string[] args)
 {
-    await Koduma.Mcp.KodumaMcpServer.RunAsync(analyzers, CancellationToken.None);
+    var root = ParseRoot(args) ?? Directory.GetCurrentDirectory();
+    await Koduma.Mcp.KodumaMcpServer.RunAsync(analyzers, generators, root, CancellationToken.None);
     return 0;
+}
+
+static string? ParseRoot(string[] args)
+{
+    for (var i = 1; i < args.Length; i++)
+    {
+        if (args[i] == "--root" && i + 1 < args.Length)
+            return args[i + 1];
+    }
+
+    return null;
 }

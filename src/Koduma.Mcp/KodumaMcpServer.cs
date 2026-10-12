@@ -3,6 +3,7 @@ using Koduma.Core.Analysis;
 using Koduma.Core.Config;
 using Koduma.Core.Discovery;
 using Koduma.Core.Model;
+using Koduma.Reporting;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
@@ -10,7 +11,11 @@ namespace Koduma.Mcp;
 
 public static class KodumaMcpServer
 {
-    public static async Task RunAsync(IReadOnlyList<ILanguageAnalyzer> analyzers, CancellationToken cancellationToken)
+    public static async Task RunAsync(
+        IReadOnlyList<ILanguageAnalyzer> analyzers,
+        IReadOnlyList<IReportGenerator> generators,
+        string root,
+        CancellationToken cancellationToken)
     {
         var tools = new List<Tool>
         {
@@ -19,7 +24,7 @@ public static class KodumaMcpServer
                 Name = "analyze_project",
                 Description = "Analyzes a project path for code smells, metrics and security issues.",
                 InputSchema = ParseSchema(
-                    """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"""),
+                    """{"type":"object","properties":{"path":{"type":"string"},"format":{"type":"string"},"rules_config":{"type":"object"}},"required":["path"]}"""),
             },
             new()
             {
@@ -46,15 +51,13 @@ public static class KodumaMcpServer
 
         options.Handlers.CallToolHandler = async (request, ct) =>
         {
-            var arguments = request.Params?.Arguments ?? new Dictionary<string, JsonElement>();
+            var arguments = new Dictionary<string, JsonElement>(request.Params?.Arguments ?? new Dictionary<string, JsonElement>());
 
             try
             {
                 string payload = request.Params?.Name switch
                 {
-                    "analyze_project" => JsonSerializer.Serialize(
-                        await HandleAnalyzeProject(arguments, analyzers, ct),
-                        KodumaJsonContext.Default.AnalysisResult),
+                    "analyze_project" => await HandleAnalyzeProject(arguments, analyzers, generators, root, ct),
                     "list_rules" => JsonSerializer.Serialize(
                         HandleListRules(arguments, analyzers),
                         KodumaJsonContext.Default.RuleArray),
@@ -100,19 +103,47 @@ public static class KodumaMcpServer
         Content = new List<ContentBlock> { new TextContentBlock { Text = message } },
     };
 
-    private static async Task<AnalysisResult> HandleAnalyzeProject(
-        IDictionary<string, JsonElement> arguments,
+    internal static string ResolveAndValidatePath(string path, string root)
+    {
+        var fullRoot = Path.GetFullPath(root);
+        var fullPath = Path.GetFullPath(path, fullRoot);
+        if (fullPath != fullRoot && !fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Path '{path}' is outside the configured root '{root}'.");
+
+        return fullPath;
+    }
+
+    internal static async Task<string> HandleAnalyzeProject(
+        IReadOnlyDictionary<string, JsonElement> arguments,
         IReadOnlyList<ILanguageAnalyzer> analyzers,
+        IReadOnlyList<IReportGenerator> generators,
+        string root,
         CancellationToken ct)
     {
         var path = arguments.TryGetValue("path", out var pathElement) ? pathElement.GetString()! : ".";
-        var config = KodumaConfigLoader.LoadOrDefault(path);
+        var fullPath = ResolveAndValidatePath(path, root);
+
+        var format = arguments.TryGetValue("format", out var formatElement) ? formatElement.GetString()! : "json";
+        var generator = generators.FirstOrDefault(g => g.Format == format)
+            ?? throw new InvalidOperationException($"Unknown format '{format}'.");
+
+        var config = KodumaConfigLoader.LoadOrDefault(fullPath);
+        if (arguments.TryGetValue("rules_config", out var rulesConfigElement))
+        {
+            var overriddenRules = KodumaConfigLoader.ParseRulesConfig(rulesConfigElement);
+            config = config with { Rules = overriddenRules };
+        }
+
         var orchestrator = new AnalysisOrchestrator(analyzers, new FileDiscovery());
-        return await orchestrator.AnalyzeAsync(path, config, ct);
+        var result = await orchestrator.AnalyzeAsync(fullPath, config, ct);
+
+        using var writer = new StringWriter();
+        generator.Write(result, writer);
+        return writer.ToString();
     }
 
     private static Rule[] HandleListRules(
-        IDictionary<string, JsonElement> arguments,
+        IReadOnlyDictionary<string, JsonElement> arguments,
         IReadOnlyList<ILanguageAnalyzer> analyzers)
     {
         var language = arguments.TryGetValue("language", out var languageElement) ? languageElement.GetString() : null;
