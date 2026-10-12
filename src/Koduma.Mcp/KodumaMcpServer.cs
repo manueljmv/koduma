@@ -103,6 +103,11 @@ public static class KodumaMcpServer
         Content = new List<ContentBlock> { new TextContentBlock { Text = message } },
     };
 
+    // Known limitation: vulnerable to TOCTOU (a symlink swapped between this check
+    // and the actual file access) and to /proc/<pid>/root mount-namespace magic
+    // links. Both require kernel-level resolution (openat2/O_PATH) that .NET
+    // doesn't expose; accepted for this tool's local, single-user, stdio-only
+    // threat model.
     internal static string ResolveAndValidatePath(string path, string root)
     {
         var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
