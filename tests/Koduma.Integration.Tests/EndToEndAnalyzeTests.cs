@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Xunit;
 
 public class EndToEndAnalyzeTests : IDisposable
@@ -12,10 +13,13 @@ public class EndToEndAnalyzeTests : IDisposable
         _publishDir = Path.Combine(_repoRoot, "src", "Koduma.Cli", "bin", "e2e-publish");
         Directory.CreateDirectory(_fixtureRoot);
 
+        var os = OperatingSystem.IsWindows() ? "win" : OperatingSystem.IsMacOS() ? "osx" : "linux";
+        var rid = $"{os}-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}";
+
         var publish = Process.Start(new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"publish \"{Path.Combine(_repoRoot, "src", "Koduma.Cli", "Koduma.Cli.csproj")}\" -c Release -r linux-x64 --self-contained -o \"{_publishDir}\"",
+            Arguments = $"publish \"{Path.Combine(_repoRoot, "src", "Koduma.Cli", "Koduma.Cli.csproj")}\" -c Release -r {rid} --self-contained -o \"{_publishDir}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         })!;
@@ -70,7 +74,8 @@ public class EndToEndAnalyzeTests : IDisposable
 
     private async Task<(int ExitCode, string StdOut, string StdErr)> RunKoduma(params string[] args)
     {
-        var binary = Path.Combine(_publishDir, "Koduma.Cli");
+        var exeSuffix = OperatingSystem.IsWindows() ? ".exe" : "";
+        var binary = Path.Combine(_publishDir, "Koduma.Cli" + exeSuffix);
         var startInfo = new ProcessStartInfo
         {
             FileName = binary,

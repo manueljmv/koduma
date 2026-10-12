@@ -2,6 +2,7 @@ using Koduma.Core.Config;
 using Koduma.Core.Discovery;
 using Xunit;
 
+// These tests create real symlinks; on Windows this requires Developer Mode or admin rights.
 public class FileDiscoveryTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "koduma-discovery-" + Guid.NewGuid());

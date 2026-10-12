@@ -5,6 +5,7 @@ using Koduma.Mcp;
 using Koduma.Reporting;
 using Xunit;
 
+// These tests create real symlinks; on Windows this requires Developer Mode or admin rights.
 public class KodumaMcpServerTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "koduma-mcp-" + Guid.NewGuid());
