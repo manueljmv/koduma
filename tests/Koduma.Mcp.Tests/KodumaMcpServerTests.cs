@@ -177,6 +177,16 @@ public class KodumaMcpServerTests : IDisposable
     }
 
     [Fact]
+    public void ResolveAndValidatePath_Allows_SubdirectoryPath_WhenRootIsFilesystemRoot()
+    {
+        var filesystemRoot = Path.GetPathRoot(_root)!;
+
+        var resolved = KodumaMcpServer.ResolveAndValidatePath(_root, filesystemRoot);
+
+        Assert.Equal(Path.GetFullPath(_root), resolved);
+    }
+
+    [Fact]
     public async Task HandleAnalyzeProject_UsesRequestedFormat_InsteadOfJson()
     {
         File.WriteAllText(Path.Combine(_root, "secret.txt"), "password = \"SuperSecret123!\"");

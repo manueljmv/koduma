@@ -174,8 +174,11 @@ public static class KodumaMcpServer
         return path.Substring(root.Length).Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
     }
 
-    private static bool IsWithinRoot(string candidate, string fullRoot) =>
-        candidate == fullRoot || candidate.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+    private static bool IsWithinRoot(string candidate, string fullRoot)
+    {
+        var prefix = fullRoot.EndsWith(Path.DirectorySeparatorChar) ? fullRoot : fullRoot + Path.DirectorySeparatorChar;
+        return candidate == fullRoot || candidate.StartsWith(prefix, StringComparison.Ordinal);
+    }
 
     internal static async Task<string> HandleAnalyzeProject(
         IReadOnlyDictionary<string, JsonElement> arguments,
