@@ -18,7 +18,7 @@ public static class AnalyzeCommand
         var (path, formats, failOnText) = ParseArguments(args);
 
         var failOnThreshold = Severity.Critical;
-        if (failOnText is not null && !Enum.TryParse(failOnText, ignoreCase: true, out failOnThreshold))
+        if (failOnText is not null && (!Enum.TryParse(failOnText, ignoreCase: true, out failOnThreshold) || !Enum.IsDefined(failOnThreshold)))
         {
             stderr.WriteLine($"Unknown --fail-on severity '{failOnText}'.");
             return 2;

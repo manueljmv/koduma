@@ -146,4 +146,19 @@ public class AnalyzeCommandTests : IDisposable
         Assert.Contains("bogus", stderr.ToString());
         Assert.DoesNotContain("Exception", stderr.ToString());
     }
+
+    [Fact]
+    public async Task Run_ReturnsTwo_AndPrintsCleanMessage_WhenFailOnSeverityIsUndefinedNumericValue()
+    {
+        File.WriteAllText(Path.Combine(_root, "ok.txt"), "nothing suspicious here");
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+
+        var exitCode = await AnalyzeCommand.Run(
+            new[] { "analyze", _root, "--fail-on", "99" }, Analyzers(), Generators(), stdout, stderr);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("99", stderr.ToString());
+        Assert.DoesNotContain("Exception", stderr.ToString());
+    }
 }
