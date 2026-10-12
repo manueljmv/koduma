@@ -44,4 +44,19 @@ public class SecretsAnalyzerTests : IDisposable
         Assert.Contains(sqliIssues, i => i.Line == 2);
         Assert.Contains(sqliIssues, i => i.Line == 3);
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotFlagOrdinaryUiStringsContainingSqlVerbs()
+    {
+        File.WriteAllText(_file, """
+        var confirm = "Delete " + item.Name + "?";
+        var cmd = `update ${pkg}`;
+        var prompt = "Select a file: " + path;
+        """);
+
+        var analyzer = new SecretsAnalyzer();
+        var result = await analyzer.AnalyzeAsync(Path.GetDirectoryName(_file)!, new[] { _file }, KodumaConfig.Default, CancellationToken.None);
+
+        Assert.DoesNotContain(result.Issues, i => i.RuleId == "SEC-SQLI-001");
+    }
 }

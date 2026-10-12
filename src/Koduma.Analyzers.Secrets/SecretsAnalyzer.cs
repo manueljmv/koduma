@@ -22,7 +22,7 @@ public class SecretsAnalyzer : ILanguageAnalyzer
         ("SEC-SECRET-001", "AWS access key", new Regex("AKIA[0-9A-Z]{16}", RegexOptions.Compiled)),
         ("SEC-SECRET-001", "Hardcoded password", new Regex(@"password\s*=\s*""[^""]{8,}""", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
         ("SEC-SQLI-001", "Possible SQL injection", new Regex(
-            @"(SELECT|INSERT|UPDATE|DELETE|DROP)\b[^\n]*(?:[""']\s*\+|\$\{|#\{)",
+            @"(SELECT\b[^\n]*\bFROM\b|INSERT\s+INTO\b|UPDATE\b[^\n]*\bSET\b|DELETE\s+FROM\b|DROP\s+(TABLE|DATABASE)\b)[^\n]*(?:[""']\s*\+|\$\{|#\{)",
             RegexOptions.Compiled | RegexOptions.IgnoreCase)),
     };
 
