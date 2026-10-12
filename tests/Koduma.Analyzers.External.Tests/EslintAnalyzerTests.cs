@@ -59,4 +59,12 @@ public class EslintAnalyzerTests
 
         Assert.Equal("/some/project", runner.LastWorkingDirectory);
     }
+
+    [Theory]
+    [InlineData(true, "eslint.cmd")]
+    [InlineData(false, "eslint")]
+    public void ResolveEslintExecutable_PicksCmdShimOnWindowsOnly(bool isWindows, string expected)
+    {
+        Assert.Equal(expected, EslintAnalyzer.ResolveEslintExecutable(isWindows));
+    }
 }

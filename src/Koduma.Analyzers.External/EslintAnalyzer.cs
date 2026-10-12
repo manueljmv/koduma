@@ -6,6 +6,10 @@ namespace Koduma.Analyzers.External;
 
 public class EslintAnalyzer : ILanguageAnalyzer
 {
+    internal static string ResolveEslintExecutable(bool isWindows) => isWindows ? "eslint.cmd" : "eslint";
+
+    private static readonly string EslintExecutable = ResolveEslintExecutable(OperatingSystem.IsWindows());
+
     private readonly ExternalProcessRunner _runner;
 
     public EslintAnalyzer(ExternalProcessRunner runner) => _runner = runner;
@@ -21,7 +25,7 @@ public class EslintAnalyzer : ILanguageAnalyzer
         var arguments = new List<string> { "--format", "json" };
         arguments.AddRange(filePaths);
 
-        var (exitCode, stdOut, stdErr) = await _runner.RunAsync("eslint", arguments, projectPath);
+        var (exitCode, stdOut, stdErr) = await _runner.RunAsync(EslintExecutable, arguments, projectPath);
 
         if (exitCode == -1)
             return new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 0), Error: $"eslint could not be run: {stdErr}");
