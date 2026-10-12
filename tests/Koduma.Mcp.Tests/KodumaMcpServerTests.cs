@@ -129,6 +129,53 @@ public class KodumaMcpServerTests : IDisposable
         Assert.Contains("outside the configured root", ex.Message);
     }
 
+    private string CreateOutsideWithDeepAndSecret()
+    {
+        var outside = Path.Combine(Path.GetTempPath(), "koduma-mcp-outside-" + Guid.NewGuid());
+        Directory.CreateDirectory(Path.Combine(outside, "deep"));
+        Directory.CreateDirectory(Path.Combine(outside, "y"));
+        File.WriteAllText(Path.Combine(outside, "y", "secret.txt"), "x");
+        _extraTempDirs.Add(outside);
+        Directory.CreateSymbolicLink(Path.Combine(_root, "l2"), Path.Combine(outside, "deep"));
+        return outside;
+    }
+
+    [Fact]
+    public void ResolveAndValidatePath_Throws_WhenDirectorySymlinkTargetDotDotFollowsAnotherSymlink()
+    {
+        CreateOutsideWithDeepAndSecret();
+        Directory.CreateSymbolicLink(Path.Combine(_root, "a"), "l2/../y");
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            KodumaMcpServer.ResolveAndValidatePath(Path.Combine("a", "secret.txt"), _root));
+
+        Assert.Contains("outside the configured root", ex.Message);
+    }
+
+    [Fact]
+    public void ResolveAndValidatePath_Throws_WhenFileSymlinkTargetDotDotFollowsAnotherSymlink()
+    {
+        CreateOutsideWithDeepAndSecret();
+        File.CreateSymbolicLink(Path.Combine(_root, "lf"), "l2/../y/secret.txt");
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            KodumaMcpServer.ResolveAndValidatePath("lf", _root));
+
+        Assert.Contains("outside the configured root", ex.Message);
+    }
+
+    [Fact]
+    public void ResolveAndValidatePath_Allows_RelativeSymlinkWithDotDotStayingWithinRoot()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "sub"));
+        File.WriteAllText(Path.Combine(_root, "sub", "target.txt"), "x");
+        File.CreateSymbolicLink(Path.Combine(_root, "link"), "sub/../sub/target.txt");
+
+        var resolved = KodumaMcpServer.ResolveAndValidatePath("link", _root);
+
+        Assert.Equal(Path.Combine(Path.GetFullPath(_root), "link"), resolved);
+    }
+
     [Fact]
     public async Task HandleAnalyzeProject_UsesRequestedFormat_InsteadOfJson()
     {

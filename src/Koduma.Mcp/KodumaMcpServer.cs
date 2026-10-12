@@ -135,19 +135,24 @@ public static class KodumaMcpServer
             }
 
             var candidate = Path.Combine(resolved, segment);
-            if (File.Exists(candidate) || Directory.Exists(candidate))
-            {
-                var target = File.ResolveLinkTarget(candidate, returnFinalTarget: false);
-                if (target is not null)
-                {
-                    if (++linkHops > 40)
-                        throw new InvalidOperationException($"Too many levels of symbolic links resolving '{path}'.");
 
-                    resolved = GetRoot(target.FullName);
-                    foreach (var seg in SplitSegments(target.FullName).Reverse())
-                        remaining.Push(seg);
-                    continue;
-                }
+            string? linkTarget = null;
+            if (File.Exists(candidate))
+                linkTarget = new FileInfo(candidate).LinkTarget;
+            else if (Directory.Exists(candidate))
+                linkTarget = new DirectoryInfo(candidate).LinkTarget;
+
+            if (linkTarget is not null)
+            {
+                if (++linkHops > 40)
+                    throw new InvalidOperationException($"Too many levels of symbolic links resolving '{path}'.");
+
+                // Raw target text: '..' must be applied after earlier segments are themselves resolved, not collapsed lexically.
+                if (Path.IsPathRooted(linkTarget))
+                    resolved = GetRoot(linkTarget);
+                foreach (var seg in SplitSegments(linkTarget).Reverse())
+                    remaining.Push(seg);
+                continue;
             }
 
             resolved = candidate;
