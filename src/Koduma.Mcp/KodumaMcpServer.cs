@@ -169,20 +169,23 @@ public static class KodumaMcpServer
     private static string GetRoot(string path)
     {
         var root = Path.GetPathRoot(path) ?? Path.DirectorySeparatorChar.ToString();
-        var trimmed = root.TrimEnd(Path.DirectorySeparatorChar);
+        var trimmed = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return trimmed.Length == 0 ? Path.DirectorySeparatorChar.ToString() : trimmed;
     }
 
     private static IEnumerable<string> SplitSegments(string path)
     {
         var root = Path.GetPathRoot(path) ?? Path.DirectorySeparatorChar.ToString();
-        return path.Substring(root.Length).Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        return path.Substring(root.Length).Split(
+            new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+            StringSplitOptions.RemoveEmptyEntries);
     }
 
-    private static bool IsWithinRoot(string candidate, string fullRoot)
+    internal static bool IsWithinRoot(string candidate, string fullRoot)
     {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var prefix = fullRoot.EndsWith(Path.DirectorySeparatorChar) ? fullRoot : fullRoot + Path.DirectorySeparatorChar;
-        return candidate == fullRoot || candidate.StartsWith(prefix, StringComparison.Ordinal);
+        return string.Equals(candidate, fullRoot, comparison) || candidate.StartsWith(prefix, comparison);
     }
 
     internal static async Task<string> HandleAnalyzeProject(

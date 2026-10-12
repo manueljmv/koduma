@@ -215,4 +215,12 @@ public class KodumaMcpServerTests : IDisposable
         using var document = JsonDocument.Parse(output);
         Assert.Equal(0, document.RootElement.GetProperty("Issues").GetArrayLength());
     }
+
+    [Fact]
+    public void IsWithinRoot_CaseSensitivityMatchesPlatform()
+    {
+        var result = KodumaMcpServer.IsWithinRoot("/ROOT/sub", "/root");
+
+        Assert.Equal(OperatingSystem.IsWindows(), result);
+    }
 }
