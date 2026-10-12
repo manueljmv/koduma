@@ -8,9 +8,16 @@ using Xunit;
 public class KodumaMcpServerTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "koduma-mcp-" + Guid.NewGuid());
+    private readonly List<string> _extraTempDirs = new();
 
     public KodumaMcpServerTests() => Directory.CreateDirectory(_root);
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+
+    public void Dispose()
+    {
+        Directory.Delete(_root, recursive: true);
+        foreach (var dir in _extraTempDirs)
+            Directory.Delete(dir, recursive: true);
+    }
 
     private static IReadOnlyDictionary<string, JsonElement> Args(string json)
     {
@@ -33,6 +40,34 @@ public class KodumaMcpServerTests : IDisposable
         var resolved = KodumaMcpServer.ResolveAndValidatePath(".", _root);
 
         Assert.Equal(Path.GetFullPath(_root), resolved);
+    }
+
+    [Fact]
+    public void ResolveAndValidatePath_Throws_WhenSymlinkInsideRootEscapesIt()
+    {
+        var outside = Path.Combine(Path.GetTempPath(), "koduma-mcp-outside-" + Guid.NewGuid());
+        Directory.CreateDirectory(outside);
+        _extraTempDirs.Add(outside);
+
+        var linkPath = Path.Combine(_root, "escape-link");
+        Directory.CreateSymbolicLink(linkPath, outside);
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            KodumaMcpServer.ResolveAndValidatePath("escape-link", _root));
+
+        Assert.Contains("outside the configured root", ex.Message);
+    }
+
+    [Fact]
+    public void ResolveAndValidatePath_Allows_SubdirectoryPath_WhenRootHasTrailingSeparator()
+    {
+        var subdirectory = Path.Combine(_root, "subdir");
+        Directory.CreateDirectory(subdirectory);
+        var rootWithTrailingSeparator = _root + Path.DirectorySeparatorChar;
+
+        var resolved = KodumaMcpServer.ResolveAndValidatePath("subdir", rootWithTrailingSeparator);
+
+        Assert.Equal(Path.GetFullPath(subdirectory), resolved);
     }
 
     [Fact]

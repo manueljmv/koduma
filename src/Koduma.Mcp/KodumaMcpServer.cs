@@ -105,13 +105,21 @@ public static class KodumaMcpServer
 
     internal static string ResolveAndValidatePath(string path, string root)
     {
-        var fullRoot = Path.GetFullPath(root);
+        var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
         var fullPath = Path.GetFullPath(path, fullRoot);
-        if (fullPath != fullRoot && !fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+
+        var resolved = (File.Exists(fullPath) || Directory.Exists(fullPath))
+            ? File.ResolveLinkTarget(fullPath, returnFinalTarget: true)?.FullName
+            : null;
+
+        if (!IsWithinRoot(fullPath, fullRoot) || (resolved is not null && !IsWithinRoot(resolved, fullRoot)))
             throw new InvalidOperationException($"Path '{path}' is outside the configured root '{root}'.");
 
         return fullPath;
     }
+
+    private static bool IsWithinRoot(string candidate, string fullRoot) =>
+        candidate == fullRoot || candidate.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal);
 
     internal static async Task<string> HandleAnalyzeProject(
         IReadOnlyDictionary<string, JsonElement> arguments,
