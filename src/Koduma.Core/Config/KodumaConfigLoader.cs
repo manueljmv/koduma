@@ -1,12 +1,13 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Koduma.Core.Model;
 
 namespace Koduma.Core.Config;
 
 public static class KodumaConfigLoader
 {
-    public static KodumaConfig LoadOrDefault(string projectPath)
+    public static KodumaConfig LoadOrDefault(string projectPath, IReadOnlyCollection<string> knownRuleIds)
     {
         var path = Path.Combine(projectPath, "koduma.json");
         if (!File.Exists(path))
@@ -47,7 +48,67 @@ public static class KodumaConfigLoader
             throw new KodumaConfigException($"exclude: expected an array, got '{nonArrayExclude.ToJsonString()}'.");
         }
 
-        return new KodumaConfig(rules, exclude);
+        var customPatterns = ParseCustomPatterns(root?["customPatterns"], knownRuleIds);
+
+        return new KodumaConfig(rules, exclude, customPatterns);
+    }
+
+    private static List<CustomPatternRule> ParseCustomPatterns(JsonNode? node, IReadOnlyCollection<string> knownRuleIds)
+    {
+        var result = new List<CustomPatternRule>();
+        if (node is null)
+            return result;
+
+        if (node is not JsonArray array)
+            throw new KodumaConfigException($"customPatterns: expected an array, got '{node.ToJsonString()}'.");
+
+        var seenIds = new HashSet<string>();
+        foreach (var entry in array)
+        {
+            if (entry is not JsonObject obj)
+                throw new KodumaConfigException($"customPatterns: expected an object entry, got '{entry?.ToJsonString() ?? "null"}'.");
+
+            var id = ReadRequiredString(obj, "id");
+            var name = ReadRequiredString(obj, "name");
+            var pattern = ReadRequiredString(obj, "pattern");
+
+            if (!seenIds.Add(id))
+                throw new KodumaConfigException($"customPatterns: duplicate id '{id}'.");
+            if (knownRuleIds.Contains(id))
+                throw new KodumaConfigException($"customPatterns: id '{id}' collides with a built-in rule id.");
+
+            try
+            {
+                _ = new Regex(pattern);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new KodumaConfigException($"customPatterns: entry '{id}' has an invalid pattern: {ex.Message}", ex);
+            }
+
+            var severity = Severity.Critical;
+            if (obj["severity"] is JsonValue severityValue && severityValue.TryGetValue<string>(out var severityText))
+            {
+                if (!Enum.TryParse<Severity>(severityText, ignoreCase: true, out severity))
+                    throw new KodumaConfigException($"customPatterns: entry '{id}' has unknown severity '{severityText}'.");
+            }
+
+            var message = obj["message"] is JsonValue messageValue && messageValue.TryGetValue<string>(out var messageText)
+                ? messageText
+                : $"Possible {name} leak.";
+
+            result.Add(new CustomPatternRule(id, name, pattern, severity, message));
+        }
+
+        return result;
+    }
+
+    private static string ReadRequiredString(JsonObject obj, string field)
+    {
+        if (obj[field] is JsonValue value && value.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text))
+            return text;
+
+        throw new KodumaConfigException($"customPatterns: entry is missing a required non-empty \"{field}\".");
     }
 
     public static Dictionary<string, RuleOverride> ParseRulesConfig(JsonElement rulesElement)

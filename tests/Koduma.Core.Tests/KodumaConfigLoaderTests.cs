@@ -13,7 +13,7 @@ public class KodumaConfigLoaderTests : IDisposable
     [Fact]
     public void LoadOrDefault_ReturnsDefault_WhenNoFileExists()
     {
-        var config = KodumaConfigLoader.LoadOrDefault(_root);
+        var config = KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>());
 
         Assert.Empty(config.Rules);
         Assert.Empty(config.Exclude);
@@ -32,7 +32,7 @@ public class KodumaConfigLoaderTests : IDisposable
         }
         """);
 
-        var config = KodumaConfigLoader.LoadOrDefault(_root);
+        var config = KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>());
 
         Assert.False(config.Rules["CS-NAMING-001"].Enabled);
         Assert.Equal(Severity.Blocker, config.Rules["SEC-SECRET-001"].Severity);
@@ -44,7 +44,7 @@ public class KodumaConfigLoaderTests : IDisposable
     {
         File.WriteAllText(Path.Combine(_root, "koduma.json"), "{ not valid json");
 
-        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root));
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>()));
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class KodumaConfigLoaderTests : IDisposable
         { "exclude": [1] }
         """);
 
-        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root));
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>()));
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class KodumaConfigLoaderTests : IDisposable
         { "exclude": "**/bin/**" }
         """);
 
-        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root));
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>()));
     }
 
     [Fact]
@@ -74,7 +74,102 @@ public class KodumaConfigLoaderTests : IDisposable
         { "rules": { "CS-NAMING-001": 123 } }
         """);
 
-        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root));
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void LoadOrDefault_ParsesCustomPatterns_WithDefaultsForSeverityAndMessage()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "customPatterns": [
+            { "id": "SEC-CUSTOM-001", "name": "Internal token", "pattern": "ITOK-[0-9A-F]{8}" }
+        ] }
+        """);
+
+        var config = KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>());
+
+        var rule = Assert.Single(config.CustomPatterns);
+        Assert.Equal("SEC-CUSTOM-001", rule.Id);
+        Assert.Equal(Severity.Critical, rule.Severity);
+        Assert.Equal("Possible Internal token leak.", rule.Message);
+    }
+
+    [Fact]
+    public void LoadOrDefault_ParsesCustomPatterns_WithExplicitSeverityAndMessage()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "customPatterns": [
+            { "id": "SEC-CUSTOM-001", "name": "Internal token", "pattern": "ITOK-[0-9A-F]{8}",
+              "severity": "major", "message": "Internal token leaked." }
+        ] }
+        """);
+
+        var config = KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>());
+
+        var rule = Assert.Single(config.CustomPatterns);
+        Assert.Equal(Severity.Major, rule.Severity);
+        Assert.Equal("Internal token leaked.", rule.Message);
+    }
+
+    [Fact]
+    public void LoadOrDefault_ReturnsEmptyCustomPatterns_WhenKeyIsAbsent()
+    {
+        var config = KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>());
+
+        Assert.Empty(config.CustomPatterns);
+    }
+
+    [Fact]
+    public void LoadOrDefault_Throws_WhenCustomPatternIsMissingId()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "customPatterns": [ { "name": "x", "pattern": "a" } ] }
+        """);
+
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void LoadOrDefault_Throws_WhenCustomPatternIsMissingPattern()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "customPatterns": [ { "id": "SEC-CUSTOM-001", "name": "x" } ] }
+        """);
+
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void LoadOrDefault_Throws_WhenCustomPatternRegexIsInvalid()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "customPatterns": [ { "id": "SEC-CUSTOM-001", "name": "x", "pattern": "[unterminated" } ] }
+        """);
+
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void LoadOrDefault_Throws_WhenCustomPatternIdsCollideWithEachOther()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "customPatterns": [
+            { "id": "SEC-CUSTOM-001", "name": "x", "pattern": "a" },
+            { "id": "SEC-CUSTOM-001", "name": "y", "pattern": "b" }
+        ] }
+        """);
+
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void LoadOrDefault_Throws_WhenCustomPatternIdCollidesWithAnyKnownBuiltInRuleId()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "customPatterns": [ { "id": "CS-NAMING-001", "name": "x", "pattern": "a" } ] }
+        """);
+
+        Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, new[] { "CS-NAMING-001" }));
     }
 
     [Fact]

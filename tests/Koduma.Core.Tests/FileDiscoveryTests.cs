@@ -38,7 +38,7 @@ public class FileDiscoveryTests : IDisposable
         File.WriteAllBytes(Path.Combine(_root, "photo.png"), new byte[] { 0x89, 0x50, 0x4E, 0x47 });
         File.WriteAllText(Path.Combine(_root, "huge.cs"), new string('x', 11 * 1024 * 1024));
 
-        var config = new KodumaConfig(new(), new List<string> { "**/excluded/**" });
+        var config = new KodumaConfig(new(), new List<string> { "**/excluded/**" }, new());
         Directory.CreateDirectory(Path.Combine(_root, "excluded"));
         File.WriteAllText(Path.Combine(_root, "excluded", "skip.cs"), "class S {}");
 

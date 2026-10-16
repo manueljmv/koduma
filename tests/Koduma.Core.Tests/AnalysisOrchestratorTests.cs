@@ -90,7 +90,8 @@ public class AnalysisOrchestratorTests
                 ["CS-NAMING-001"] = new RuleOverride(Enabled: false, Severity: null),
                 ["SEC-SECRET-001"] = new RuleOverride(Enabled: null, Severity: Severity.Blocker),
             },
-            new List<string>());
+            new List<string>(),
+            new List<CustomPatternRule>());
 
         var orchestrator = new AnalysisOrchestrator(new ILanguageAnalyzer[] { analyzer }, new FakeDiscovery());
 
