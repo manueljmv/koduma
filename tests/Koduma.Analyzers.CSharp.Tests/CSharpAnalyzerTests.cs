@@ -42,4 +42,28 @@ public class CSharpAnalyzerTests : IDisposable
         Assert.True(result.Metrics.LinesOfCode > 0);
         Assert.True(result.Metrics.CyclomaticComplexity >= 11);
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_FlagsEmptyCatchBlock_ButNotOneWithAStatement()
+    {
+        File.WriteAllText(_file, """
+        public class Example
+        {
+            public void M()
+            {
+                try { DoWork(); } catch (Exception) { }
+                try { DoWork(); } catch (Exception) { Log(); }
+            }
+            private void DoWork() { }
+            private void Log() { }
+        }
+        """);
+
+        var analyzer = new CSharpAnalyzer();
+        var result = await analyzer.AnalyzeAsync(Path.GetDirectoryName(_file)!, new[] { _file }, KodumaConfig.Default, CancellationToken.None);
+
+        var emptyCatchIssues = result.Issues.Where(i => i.RuleId == "CS-DESIGN-001").ToList();
+        Assert.Single(emptyCatchIssues);
+        Assert.Equal(5, emptyCatchIssues[0].Line);
+    }
 }
