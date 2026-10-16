@@ -156,4 +156,23 @@ public class CSharpAnalyzerTests : IDisposable
         Assert.Single(issues);
         Assert.Equal(3, issues[0].Line);
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotFlagSpanishWordsContainingTodoAsASubstring()
+    {
+        File.WriteAllText(_file, """
+        public class Example
+        {
+            // Este metodo procesa todo el lote de pedidos
+            public void M()
+            {
+            }
+        }
+        """);
+
+        var analyzer = new CSharpAnalyzer();
+        var result = await analyzer.AnalyzeAsync(Path.GetDirectoryName(_file)!, new[] { _file }, KodumaConfig.Default, CancellationToken.None);
+
+        Assert.DoesNotContain(result.Issues, i => i.RuleId == "CS-SMELL-001");
+    }
 }

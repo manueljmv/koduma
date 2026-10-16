@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Koduma.Core.Model;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -13,6 +14,8 @@ internal static class TodoCommentRule
         SyntaxKind.SingleLineDocumentationCommentTrivia,
     };
 
+    private static readonly Regex MarkerPattern = new(@"\b(TODO|FIXME)\b", RegexOptions.Compiled);
+
     public static IEnumerable<IIssue> Evaluate(SyntaxTree tree, string filePath)
     {
         var root = tree.GetCompilationUnitRoot();
@@ -22,9 +25,7 @@ internal static class TodoCommentRule
             if (!CommentKinds.Contains(trivia.Kind()))
                 continue;
 
-            var text = trivia.ToString();
-            if (!text.Contains("TODO", StringComparison.OrdinalIgnoreCase) &&
-                !text.Contains("FIXME", StringComparison.OrdinalIgnoreCase))
+            if (!MarkerPattern.IsMatch(trivia.ToString()))
                 continue;
 
             var lineSpan = trivia.GetLocation().GetLineSpan();
