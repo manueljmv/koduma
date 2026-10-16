@@ -66,4 +66,23 @@ public class CSharpAnalyzerTests : IDisposable
         Assert.Single(emptyCatchIssues);
         Assert.Equal(5, emptyCatchIssues[0].Line);
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_FlagsMethodWithEightParameters_ButNotSeven()
+    {
+        File.WriteAllText(_file, """
+        public class Example
+        {
+            public void Seven(int a, int b, int c, int d, int e, int f, int g) { }
+            public void Eight(int a, int b, int c, int d, int e, int f, int g, int h) { }
+        }
+        """);
+
+        var analyzer = new CSharpAnalyzer();
+        var result = await analyzer.AnalyzeAsync(Path.GetDirectoryName(_file)!, new[] { _file }, KodumaConfig.Default, CancellationToken.None);
+
+        var issues = result.Issues.Where(i => i.RuleId == "CS-DESIGN-002").ToList();
+        Assert.Single(issues);
+        Assert.Contains("Eight", issues[0].Message);
+    }
 }

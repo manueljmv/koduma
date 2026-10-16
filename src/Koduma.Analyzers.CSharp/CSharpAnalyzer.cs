@@ -16,6 +16,7 @@ public class CSharpAnalyzer : ILanguageAnalyzer
         new Rule("CS-NAMING-001", "Private field naming", Category.CodeSmell, Severity.Minor, "csharp", EngineRuleId: null),
         new Rule("CS-COMPLEXITY-001", "Cyclomatic complexity", Category.CodeSmell, Severity.Major, "csharp", EngineRuleId: null),
         new Rule("CS-DESIGN-001", "Empty catch block", Category.CodeSmell, Severity.Major, "csharp", EngineRuleId: null),
+        new Rule("CS-DESIGN-002", "Too many parameters", Category.CodeSmell, Severity.Major, "csharp", EngineRuleId: null),
     };
 
     public Task<LanguageAnalysisResult> AnalyzeAsync(string projectPath, IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken)
@@ -32,6 +33,7 @@ public class CSharpAnalyzer : ILanguageAnalyzer
             totalLoc += source.Split('\n').Length;
             issues.AddRange(NamingRule.Evaluate(tree, file));
             issues.AddRange(EmptyCatchRule.Evaluate(tree, file));
+            issues.AddRange(ParameterCountRule.Evaluate(tree, file));
 
             var (complexityIssues, complexity) = ComplexityRule.Evaluate(tree, file);
             issues.AddRange(complexityIssues);
