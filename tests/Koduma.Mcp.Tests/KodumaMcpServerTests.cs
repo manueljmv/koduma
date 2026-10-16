@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Koduma.Analyzers.Secrets;
 using Koduma.Core.Analysis;
+using Koduma.Core.Config;
 using Koduma.Mcp;
 using Koduma.Reporting;
 using Xunit;
@@ -215,6 +216,21 @@ public class KodumaMcpServerTests : IDisposable
 
         using var document = JsonDocument.Parse(output);
         Assert.Equal(0, document.RootElement.GetProperty("Issues").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task HandleAnalyzeProject_Throws_WhenCustomPatternIdCollidesWithBuiltInRule()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "customPatterns": [ { "id": "SEC-SECRET-001", "name": "x", "pattern": "a" } ] }
+        """);
+        File.WriteAllText(Path.Combine(_root, "ok.txt"), "nothing suspicious here");
+
+        ILanguageAnalyzer[] analyzers = { new SecretsAnalyzer() };
+        IReportGenerator[] generators = { new JsonReportGenerator() };
+
+        await Assert.ThrowsAsync<KodumaConfigException>(() => KodumaMcpServer.HandleAnalyzeProject(
+            Args($$"""{"path": {{JsonSerializer.Serialize(_root)}}}"""), analyzers, generators, _root, CancellationToken.None));
     }
 
     [Fact]

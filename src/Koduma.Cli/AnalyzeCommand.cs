@@ -40,7 +40,7 @@ public static class AnalyzeCommand
         KodumaConfig config;
         try
         {
-            config = KodumaConfigLoader.LoadOrDefault(path);
+            config = KodumaConfigLoader.LoadOrDefault(path, analyzers.SelectMany(a => a.Rules).Select(r => r.Id).ToArray());
         }
         catch (KodumaConfigException ex)
         {

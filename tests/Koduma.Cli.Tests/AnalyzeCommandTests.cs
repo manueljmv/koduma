@@ -161,4 +161,21 @@ public class AnalyzeCommandTests : IDisposable
         Assert.Contains("99", stderr.ToString());
         Assert.DoesNotContain("Exception", stderr.ToString());
     }
+
+    [Fact]
+    public async Task Run_ReturnsTwo_AndPrintsCleanMessage_WhenCustomPatternIdCollidesWithBuiltInRule()
+    {
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        { "customPatterns": [ { "id": "SEC-SECRET-001", "name": "x", "pattern": "a" } ] }
+        """);
+        File.WriteAllText(Path.Combine(_root, "ok.txt"), "nothing suspicious here");
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+
+        var exitCode = await AnalyzeCommand.Run(new[] { "analyze", _root }, Analyzers(), Generators(), stdout, stderr);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("koduma.json", stderr.ToString());
+        Assert.DoesNotContain("Exception", stderr.ToString());
+    }
 }

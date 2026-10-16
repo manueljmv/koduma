@@ -202,7 +202,7 @@ public static class KodumaMcpServer
         var generator = generators.FirstOrDefault(g => g.Format == format)
             ?? throw new InvalidOperationException($"Unknown format '{format}'.");
 
-        var config = KodumaConfigLoader.LoadOrDefault(fullPath);
+        var config = KodumaConfigLoader.LoadOrDefault(fullPath, analyzers.SelectMany(a => a.Rules).Select(r => r.Id).ToArray());
         if (arguments.TryGetValue("rules_config", out var rulesConfigElement))
         {
             var overriddenRules = KodumaConfigLoader.ParseRulesConfig(rulesConfigElement);
