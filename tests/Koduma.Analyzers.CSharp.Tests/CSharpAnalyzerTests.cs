@@ -113,4 +113,25 @@ public class CSharpAnalyzerTests : IDisposable
         Assert.Single(issues);
         Assert.Contains("Long", issues[0].Message);
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_FlagsNonPascalCasePublicClassAndMethod_ButNotPrivateMembers()
+    {
+        File.WriteAllText(_file, """
+        public class example
+        {
+            public void doWork() { }
+            private void helper() { }
+        }
+        """);
+
+        var analyzer = new CSharpAnalyzer();
+        var result = await analyzer.AnalyzeAsync(Path.GetDirectoryName(_file)!, new[] { _file }, KodumaConfig.Default, CancellationToken.None);
+
+        var issues = result.Issues.Where(i => i.RuleId == "CS-NAMING-002").ToList();
+        Assert.Equal(2, issues.Count);
+        Assert.Contains(issues, i => i.Message.Contains("example"));
+        Assert.Contains(issues, i => i.Message.Contains("doWork"));
+        Assert.DoesNotContain(issues, i => i.Message.Contains("helper"));
+    }
 }
