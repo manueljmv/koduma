@@ -134,4 +134,26 @@ public class CSharpAnalyzerTests : IDisposable
         Assert.Contains(issues, i => i.Message.Contains("doWork"));
         Assert.DoesNotContain(issues, i => i.Message.Contains("helper"));
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_FlagsTodoComment_ButNotTodoInsideAStringLiteral()
+    {
+        File.WriteAllText(_file, """
+        public class Example
+        {
+            // TODO: fix this
+            public void M()
+            {
+                var s = "TODO list for the user";
+            }
+        }
+        """);
+
+        var analyzer = new CSharpAnalyzer();
+        var result = await analyzer.AnalyzeAsync(Path.GetDirectoryName(_file)!, new[] { _file }, KodumaConfig.Default, CancellationToken.None);
+
+        var issues = result.Issues.Where(i => i.RuleId == "CS-SMELL-001").ToList();
+        Assert.Single(issues);
+        Assert.Equal(3, issues[0].Line);
+    }
 }

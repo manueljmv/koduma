@@ -19,6 +19,7 @@ public class CSharpAnalyzer : ILanguageAnalyzer
         new Rule("CS-DESIGN-002", "Too many parameters", Category.CodeSmell, Severity.Major, "csharp", EngineRuleId: null),
         new Rule("CS-DESIGN-003", "Method too long", Category.CodeSmell, Severity.Major, "csharp", EngineRuleId: null),
         new Rule("CS-NAMING-002", "Public member naming", Category.CodeSmell, Severity.Minor, "csharp", EngineRuleId: null),
+        new Rule("CS-SMELL-001", "Leftover TODO/FIXME comment", Category.CodeSmell, Severity.Minor, "csharp", EngineRuleId: null),
     };
 
     public Task<LanguageAnalysisResult> AnalyzeAsync(string projectPath, IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken)
@@ -38,6 +39,7 @@ public class CSharpAnalyzer : ILanguageAnalyzer
             issues.AddRange(ParameterCountRule.Evaluate(tree, file));
             issues.AddRange(MethodLengthRule.Evaluate(tree, file));
             issues.AddRange(PublicNamingRule.Evaluate(tree, file));
+            issues.AddRange(TodoCommentRule.Evaluate(tree, file));
 
             var (complexityIssues, complexity) = ComplexityRule.Evaluate(tree, file);
             issues.AddRange(complexityIssues);
