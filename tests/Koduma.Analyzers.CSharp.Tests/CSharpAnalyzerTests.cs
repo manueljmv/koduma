@@ -85,4 +85,32 @@ public class CSharpAnalyzerTests : IDisposable
         Assert.Single(issues);
         Assert.Contains("Eight", issues[0].Message);
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_FlagsMethodOver60Lines_ButNotExactly60_NorExpressionBodiedOnes()
+    {
+        var exactly60 = string.Join("\n", Enumerable.Range(0, 58).Select(i => $"        var a{i} = {i};"));
+        var over60 = string.Join("\n", Enumerable.Range(0, 59).Select(i => $"        var b{i} = {i};"));
+        File.WriteAllText(_file, $$"""
+        public class Example
+        {
+            public int Short() => 1;
+            public void AtThreshold()
+            {
+        {{exactly60}}
+            }
+            public void Long()
+            {
+        {{over60}}
+            }
+        }
+        """);
+
+        var analyzer = new CSharpAnalyzer();
+        var result = await analyzer.AnalyzeAsync(Path.GetDirectoryName(_file)!, new[] { _file }, KodumaConfig.Default, CancellationToken.None);
+
+        var issues = result.Issues.Where(i => i.RuleId == "CS-DESIGN-003").ToList();
+        Assert.Single(issues);
+        Assert.Contains("Long", issues[0].Message);
+    }
 }

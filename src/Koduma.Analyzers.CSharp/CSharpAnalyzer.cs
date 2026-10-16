@@ -17,6 +17,7 @@ public class CSharpAnalyzer : ILanguageAnalyzer
         new Rule("CS-COMPLEXITY-001", "Cyclomatic complexity", Category.CodeSmell, Severity.Major, "csharp", EngineRuleId: null),
         new Rule("CS-DESIGN-001", "Empty catch block", Category.CodeSmell, Severity.Major, "csharp", EngineRuleId: null),
         new Rule("CS-DESIGN-002", "Too many parameters", Category.CodeSmell, Severity.Major, "csharp", EngineRuleId: null),
+        new Rule("CS-DESIGN-003", "Method too long", Category.CodeSmell, Severity.Major, "csharp", EngineRuleId: null),
     };
 
     public Task<LanguageAnalysisResult> AnalyzeAsync(string projectPath, IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken)
@@ -34,6 +35,7 @@ public class CSharpAnalyzer : ILanguageAnalyzer
             issues.AddRange(NamingRule.Evaluate(tree, file));
             issues.AddRange(EmptyCatchRule.Evaluate(tree, file));
             issues.AddRange(ParameterCountRule.Evaluate(tree, file));
+            issues.AddRange(MethodLengthRule.Evaluate(tree, file));
 
             var (complexityIssues, complexity) = ComplexityRule.Evaluate(tree, file);
             issues.AddRange(complexityIssues);
