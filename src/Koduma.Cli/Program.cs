@@ -9,6 +9,7 @@ ILanguageAnalyzer[] analyzers =
 {
     new CSharpAnalyzer(),
     new EslintAnalyzer(new ExternalProcessRunner()),
+    new DotnetBuildAnalyzer(new ExternalProcessRunner()),
     new SecretsAnalyzer(),
 };
 
