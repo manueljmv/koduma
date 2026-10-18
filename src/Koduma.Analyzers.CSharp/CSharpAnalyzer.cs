@@ -33,6 +33,14 @@ public class CSharpAnalyzer : ILanguageAnalyzer
         new Rule("CS-SEC-001", "Weak cryptographic algorithm", Category.Security, Severity.Major, "csharp", EngineRuleId: null),
         new Rule("CS-SEC-002", "Insecure deserialization", Category.Security, Severity.Critical, "csharp", EngineRuleId: null),
         new Rule("CS-SEC-003", "TLS certificate validation disabled", Category.Security, Severity.Critical, "csharp", EngineRuleId: null),
+        new Rule("CS-BUG-007", "Division or modulo by literal zero", Category.Bug, Severity.Critical, "csharp", EngineRuleId: null),
+        new Rule("CS-BUG-008", "Self-assignment", Category.Bug, Severity.Major, "csharp", EngineRuleId: null),
+        new Rule("CS-BUG-009", "Equals/GetHashCode override pair incomplete", Category.Bug, Severity.Major, "csharp", EngineRuleId: null),
+        new Rule("CS-BUG-010", "Disposable resource not declared with 'using'", Category.Bug, Severity.Major, "csharp", EngineRuleId: null),
+        new Rule("CS-DESIGN-007", "Switch statement without default case", Category.CodeSmell, Severity.Minor, "csharp", EngineRuleId: null),
+        new Rule("CS-SMELL-003", "Commented-out code", Category.CodeSmell, Severity.Minor, "csharp", EngineRuleId: null),
+        new Rule("CS-SEC-004", "Hardcoded insecure http:// URL", Category.Security, Severity.Major, "csharp", EngineRuleId: null),
+        new Rule("CS-SEC-005", "Command built via concatenation/interpolation", Category.Security, Severity.Critical, "csharp", EngineRuleId: null),
     };
 
     public Task<LanguageAnalysisResult> AnalyzeAsync(string projectPath, IReadOnlyList<string> filePaths, KodumaConfig config, CancellationToken cancellationToken)
@@ -66,6 +74,14 @@ public class CSharpAnalyzer : ILanguageAnalyzer
             issues.AddRange(WeakCryptographyRule.Evaluate(tree, file));
             issues.AddRange(InsecureDeserializationRule.Evaluate(tree, file));
             issues.AddRange(CertificateValidationRule.Evaluate(tree, file));
+            issues.AddRange(DivisionByZeroRule.Evaluate(tree, file));
+            issues.AddRange(SelfAssignmentRule.Evaluate(tree, file));
+            issues.AddRange(EqualsHashCodeRule.Evaluate(tree, file));
+            issues.AddRange(DisposableNotUsingRule.Evaluate(tree, file));
+            issues.AddRange(SwitchWithoutDefaultRule.Evaluate(tree, file));
+            issues.AddRange(CommentedOutCodeRule.Evaluate(tree, file));
+            issues.AddRange(InsecureHttpUrlRule.Evaluate(tree, file));
+            issues.AddRange(CommandInjectionRule.Evaluate(tree, file));
 
             var (complexityIssues, complexity) = ComplexityRule.Evaluate(tree, file);
             issues.AddRange(complexityIssues);

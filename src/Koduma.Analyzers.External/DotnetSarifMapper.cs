@@ -18,6 +18,8 @@ public static class DotnetSarifMapper
         "CA2310", "CA2311", "CA2312", "CA2315",
         "CA2326",                                   // TypeNameHandling other than None    -> CS-SEC-002
         "CA5359",                                   // certificate validation disabled     -> CS-SEC-003
+        "CS0659",                                   // Equals overridden without GetHashCode -> CS-BUG-009
+        "CS1717",                                   // assignment made to same variable    -> CS-BUG-008
     };
 
     public static List<IIssue> Map(string sarifJson)
