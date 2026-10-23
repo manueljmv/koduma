@@ -104,6 +104,7 @@ Reglas propias (Roslyn, in-proc, sin necesidad de SDK):
 `NuGetVulnerabilityAnalyzer` ejecuta `dotnet list package --vulnerable --include-transitive --format json` sobre la solución/proyectos analizados, y `NpmAuditAnalyzer` ejecuta `npm audit --json` en cada directorio con `package-lock.json`/`npm-shrinkwrap.json`. Los hallazgos usan ids `VULN-{GHSA-id}` (o `VULN-NUGET-*`/`VULN-NPM-*` si el aviso no trae un id de GHSA) y se configuran en `koduma.json` igual que cualquier otra regla (`"VULN-GHSA-5crp-9r3c-p9vr": "off"`).
 
 - `KODUMA_SKIP_NUGET_AUDIT=1` / `KODUMA_SKIP_NPM_AUDIT=1` desactivan cada analizador.
+- `NuGetVulnerabilityAnalyzer` dispara un `dotnet restore` implícito (igual que `DotnetBuildAnalyzer`, escribe `obj/` y ejecuta la lógica MSBuild/NuGet del propio repo), así que también respeta `KODUMA_SKIP_DOTNET_BUILD=1`. Para que `koduma analyze` no ejecute ninguna lógica del repo analizado hace falta `KODUMA_SKIP_DOTNET_BUILD=1` **y** `KODUMA_SKIP_NPM_AUDIT=1` (ESLint y npm audit no comparten ese switch).
 - A diferencia del resto de analizadores, estos consultan un feed de avisos de terceros (el mirror de GitHub Advisory Database que usa NuGet, y el registro de npm) como parte normal de cada análisis, no solo al instalar la herramienta.
 
 ## Manejo de errores

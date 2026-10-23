@@ -21,6 +21,22 @@ public class NpmAuditAnalyzerTests
         }
     }
 
+    /// <summary>Returns a different fixed result per call (by working directory), for monorepo-style tests.</summary>
+    private sealed class PerDirectoryFakeRunner : ExternalProcessRunner
+    {
+        private readonly Dictionary<string, (int ExitCode, string StdOut, string StdErr)> _resultsByDirectory;
+
+        public PerDirectoryFakeRunner(Dictionary<string, (int, string, string)> resultsByDirectory) => _resultsByDirectory = resultsByDirectory;
+
+        public List<string> WorkingDirectories { get; } = new();
+
+        public override Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments, string? workingDirectory = null)
+        {
+            WorkingDirectories.Add(workingDirectory!);
+            return Task.FromResult(_resultsByDirectory[workingDirectory!]);
+        }
+    }
+
     [Theory]
     [InlineData(true, "npm.cmd")]
     [InlineData(false, "npm")]
@@ -102,6 +118,73 @@ public class NpmAuditAnalyzerTests
             "/repo", new[] { "/repo/package-lock.json", "/repo/npm-shrinkwrap.json" }, KodumaConfig.Default, CancellationToken.None);
 
         Assert.Single(runner.Calls);
+    }
+
+    [Fact]
+    public async Task Analyze_ReportsError_WhenOutputHasNoVulnerabilitiesField()
+    {
+        // npm audit failing offline / registry error / npm 6's old shape: no top-level "vulnerabilities" key.
+        // Must not be mistaken for a clean (zero-vulnerability) run.
+        const string offlineErrorJson = """{ "message": "request to https://registry.npmjs.org/ failed", "error": { "code": "ENOTFOUND" } }""";
+        var runner = new FakeRunner((1, offlineErrorJson, ""));
+
+        var result = await new NpmAuditAnalyzer(runner).AnalyzeAsync("/repo", new[] { "/repo/package-lock.json" }, KodumaConfig.Default, CancellationToken.None);
+
+        Assert.NotNull(result.Error);
+        Assert.Empty(result.Issues);
+    }
+
+    [Fact]
+    public async Task Analyze_ReportsError_OnMalformedJson()
+    {
+        var runner = new FakeRunner((0, "{ this is not valid json", ""));
+
+        var result = await new NpmAuditAnalyzer(runner).AnalyzeAsync("/repo", new[] { "/repo/package-lock.json" }, KodumaConfig.Default, CancellationToken.None);
+
+        Assert.NotNull(result.Error);
+        Assert.Empty(result.Issues);
+    }
+
+    [Fact]
+    public async Task Analyze_ReportsError_WhenAdvisoryFieldHasUnexpectedType()
+    {
+        const string wrongTypeJson = """
+        { "vulnerabilities": { "lodash": { "severity": "critical", "via": [
+          { "source": "not-a-number", "title": "t", "url": "https://github.com/advisories/GHSA-aaaa-aaaa-aaaa", "severity": "critical" }
+        ] } } }
+        """;
+        var runner = new FakeRunner((1, wrongTypeJson, ""));
+
+        var result = await new NpmAuditAnalyzer(runner).AnalyzeAsync("/repo", new[] { "/repo/package-lock.json" }, KodumaConfig.Default, CancellationToken.None);
+
+        Assert.NotNull(result.Error);
+        Assert.Empty(result.Issues);
+    }
+
+    [Fact]
+    public async Task Analyze_AnalyzesEveryLockFileDirectory_InMonorepo()
+    {
+        const string vulnerableJson = """
+        { "vulnerabilities": { "lodash": { "severity": "critical", "via": [
+          { "source": 1, "title": "t", "url": "https://github.com/advisories/GHSA-aaaa-aaaa-aaaa", "severity": "critical" }
+        ] } } }
+        """;
+        const string cleanJson = """{ "vulnerabilities": {} }""";
+        var runner = new PerDirectoryFakeRunner(new Dictionary<string, (int, string, string)>
+        {
+            ["/repo/pkg-a"] = (1, vulnerableJson, ""),
+            ["/repo/pkg-b"] = (0, cleanJson, ""),
+        });
+
+        var result = await new NpmAuditAnalyzer(runner).AnalyzeAsync(
+            "/repo", new[] { "/repo/pkg-a/package-lock.json", "/repo/pkg-b/package-lock.json" }, KodumaConfig.Default, CancellationToken.None);
+
+        Assert.Null(result.Error);
+        Assert.Equal(2, runner.WorkingDirectories.Count);
+        Assert.Contains("/repo/pkg-a", runner.WorkingDirectories);
+        Assert.Contains("/repo/pkg-b", runner.WorkingDirectories);
+        var issue = Assert.Single(result.Issues);
+        Assert.Equal("/repo/pkg-a/package-lock.json", issue.FilePath);
     }
 
     [Fact]

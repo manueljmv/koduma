@@ -51,9 +51,14 @@ public class NpmAuditAnalyzer : ILanguageAnalyzer
 
             try
             {
+                using var document = JsonDocument.Parse(stdOut);
+                if (!document.RootElement.TryGetProperty("vulnerabilities", out _))
+                    return new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 0),
+                        Error: $"npm audit produced no 'vulnerabilities' field for {lockFile} (offline, registry error, or unsupported npm version?): {Tail(stdOut)}");
+
                 issues.AddRange(NpmAuditMapper.Map(stdOut, lockFile));
             }
-            catch (JsonException ex)
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
             {
                 return new LanguageAnalysisResult(Array.Empty<IIssue>(), new AnalysisMetrics(0, 0, 0, 0),
                     Error: $"npm audit produced unreadable output for {lockFile}: {ex.Message}");
@@ -79,5 +84,11 @@ public class NpmAuditAnalyzer : ILanguageAnalyzer
         }
 
         return byDirectory.Values.ToList();
+    }
+
+    private static string Tail(string text)
+    {
+        var trimmed = text.Trim();
+        return trimmed.Length <= 400 ? trimmed : "..." + trimmed[^400..];
     }
 }
