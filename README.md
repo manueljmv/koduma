@@ -99,6 +99,13 @@ Reglas propias (Roslyn, in-proc, sin necesidad de SDK):
 - Los hallazgos de .NET que Koduma ya cubre con regla propia (p. ej. `CA1031`, `CA2200`, `CA5350/51`) se omiten para no duplicar.
 - Su catálogo depende del SDK instalado, por lo que `koduma rules` no lo enumera.
 
+### Vulnerabilidades de dependencias (`VULN-*`)
+
+`NuGetVulnerabilityAnalyzer` ejecuta `dotnet list package --vulnerable --include-transitive --format json` sobre la solución/proyectos analizados, y `NpmAuditAnalyzer` ejecuta `npm audit --json` en cada directorio con `package-lock.json`/`npm-shrinkwrap.json`. Los hallazgos usan ids `VULN-{GHSA-id}` (o `VULN-NUGET-*`/`VULN-NPM-*` si el aviso no trae un id de GHSA) y se configuran en `koduma.json` igual que cualquier otra regla (`"VULN-GHSA-5crp-9r3c-p9vr": "off"`).
+
+- `KODUMA_SKIP_NUGET_AUDIT=1` / `KODUMA_SKIP_NPM_AUDIT=1` desactivan cada analizador.
+- A diferencia del resto de analizadores, estos consultan un feed de avisos de terceros (el mirror de GitHub Advisory Database que usa NuGet, y el registro de npm) como parte normal de cada análisis, no solo al instalar la herramienta.
+
 ## Manejo de errores
 
 Si un plugin de lenguaje falla (p. ej. ESLint no instalado), ese lenguaje se marca como error en el resultado pero el análisis de los demás lenguajes continúa (degradación parcial). Un `koduma.json` inválido aborta antes de empezar.

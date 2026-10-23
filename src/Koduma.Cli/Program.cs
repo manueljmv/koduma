@@ -11,6 +11,8 @@ ILanguageAnalyzer[] analyzers =
     new EslintAnalyzer(new ExternalProcessRunner()),
     new DotnetBuildAnalyzer(new ExternalProcessRunner()),
     new SecretsAnalyzer(),
+    new NuGetVulnerabilityAnalyzer(new ExternalProcessRunner()),
+    new NpmAuditAnalyzer(new ExternalProcessRunner()),
 };
 
 IReportGenerator[] generators =

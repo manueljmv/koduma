@@ -229,6 +229,6 @@ public static class KodumaMcpServer
     }
 
     private static McpCapabilities HandleGetCapabilities(IReadOnlyList<ILanguageAnalyzer> analyzers) => new(
-        Languages: analyzers.Select(a => a.Language).ToArray(),
+        Languages: analyzers.Select(a => a.Language).Distinct().ToArray(),
         Categories: Enum.GetNames<Category>());
 }
