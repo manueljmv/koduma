@@ -75,7 +75,9 @@ Opcional, en la raíz del repo analizado:
 }
 ```
 
-Si no existe, se usa un set de reglas por defecto por lenguaje. El discovery de archivos respeta además `.gitignore` y un `.kodumaignore` opcional.
+Si no existe, se usa un set de reglas por defecto por lenguaje. El discovery de archivos respeta además `.gitignore` (también los de carpetas superiores hasta la raíz del repo git, si se analiza una subcarpeta) y un `.kodumaignore` opcional.
+
+**Config global:** `KODUMA_CONFIG=<ruta a un koduma.json>` se aplica a todos los proyectos analizados. El `koduma.json` del proyecto se combina encima: sus `rules` y `customPatterns` prevalecen por id y los `exclude` se suman. Los globs de `exclude` son relativos a la raíz analizada, así que en la config global conviene usar `**/...`. Si la variable apunta a un fichero que no existe, es un error de configuración (código `2`).
 
 ## Reglas de C#
 
@@ -94,6 +96,7 @@ Reglas propias (Roslyn, in-proc, sin necesidad de SDK):
 `DotnetBuildAnalyzer` compila la solución (o, si no hay `.sln`/`.slnx` en la raíz, el proyecto más cercano a cada archivo) con `dotnet build` y lee el log SARIF que emite Roslyn. Así se obtienen los analizadores oficiales de .NET (`Microsoft.CodeAnalysis.NetAnalyzers`, `AnalysisMode=Recommended`) más cualquier analizador NuGet del propio repo y los avisos/errores del compilador. Los ids salen como `NET-CA2000`, `NET-CS8602`, etc., y se configuran en `koduma.json` igual que el resto (`"NET-CA1822": "off"`).
 
 - Requiere el SDK de .NET en el `PATH`; si falta, se registra como error de lenguaje `dotnet` y el resto del análisis continúa.
+- En Windows, los proyectos no-SDK (p. ej. .NET Framework/SharePoint) se compilan con el `MSBuild.exe` de Visual Studio (localizado con `vswhere`), ejecutando también sus eventos pre/post build. `NuGetVulnerabilityAnalyzer` los omite: `dotnet list package` no puede evaluarlos.
 - Hace un build real del repo analizado (escribe `bin/`/`obj/` y ejecuta su lógica MSBuild), igual que ESLint ejecuta su configuración. No uses `koduma analyze` sobre repos no confiables.
 - `KODUMA_SKIP_DOTNET_BUILD=1` desactiva este analizador.
 - Los hallazgos de .NET que Koduma ya cubre con regla propia (p. ej. `CA1031`, `CA2200`, `CA5350/51`) se omiten para no duplicar.

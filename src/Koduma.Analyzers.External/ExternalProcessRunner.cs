@@ -6,6 +6,10 @@ public class ExternalProcessRunner
 {
     internal const int CmdCommandLineLimit = 8191;
 
+    // A .cmd shim (npm, pnpm...) re-expands %* inside its own command line, which shares the same limit,
+    // so batches leave room for the shim's own prefix (node.exe path, script path, etc.).
+    internal const int CmdShimBatchLimit = CmdCommandLineLimit - 2048;
+
     internal static bool IsCmdShim(string executable) =>
         executable.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) || executable.EndsWith(".bat", StringComparison.OrdinalIgnoreCase);
 
@@ -38,6 +42,45 @@ public class ExternalProcessRunner
                "Reduce the number of files analyzed in a single invocation.";
     }
 
+    // PATH only, never the current directory, matching NoDefaultCurrentDirectoryInExePath below.
+    internal static bool IsOnPath(string executable) =>
+        Path.IsPathRooted(executable)
+            ? File.Exists(executable)
+            : (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Any(directory => Path.IsPathRooted(directory.Trim('"')) && File.Exists(Path.Combine(directory.Trim('"'), executable)));
+
+    internal static bool RoutesThroughCmd(string executable) => OperatingSystem.IsWindows() && IsCmdShim(executable);
+
+    /// <summary>Splits <paramref name="batchedArguments"/> into invocations whose cmd.exe command line stays within <see cref="CmdShimBatchLimit"/>.</summary>
+    internal static IReadOnlyList<IReadOnlyList<string>> BatchForCmd(string executable, IReadOnlyList<string> fixedArguments, IReadOnlyList<string> batchedArguments)
+    {
+        var baseLength = string.Join(" ", RerouteThroughCmd(executable, fixedArguments).Arguments).Length;
+        var batches = new List<IReadOnlyList<string>>();
+        var current = new List<string>(fixedArguments);
+        var length = baseLength;
+
+        foreach (var argument in batchedArguments)
+        {
+            // Each extra argument adds a separating space and its surrounding quotes.
+            var cost = argument.Length + 3;
+            if (length + cost > CmdShimBatchLimit && current.Count > fixedArguments.Count)
+            {
+                batches.Add(current);
+                current = new List<string>(fixedArguments);
+                length = baseLength;
+            }
+
+            current.Add(argument);
+            length += cost;
+        }
+
+        if (current.Count > fixedArguments.Count || batches.Count == 0)
+            batches.Add(current);
+
+        return batches;
+    }
+
     public virtual async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments, string? workingDirectory = null)
     {
         var startInfo = new ProcessStartInfo
@@ -49,8 +92,12 @@ public class ExternalProcessRunner
             WorkingDirectory = workingDirectory ?? string.Empty,
         };
 
-        if (OperatingSystem.IsWindows() && IsCmdShim(executable))
+        if (RoutesThroughCmd(executable))
         {
+            // cmd.exe exits 1 for an unknown command, indistinguishable from a tool's own exit code 1.
+            if (!IsOnPath(executable))
+                return (-1, string.Empty, $"'{executable}' was not found on PATH.");
+
             var unsafeArg = FindUnsafeArgument(arguments);
             if (unsafeArg is not null)
                 return (-1, string.Empty, $"Argument '{unsafeArg}' contains a character unsafe to pass through cmd.exe and was rejected.");

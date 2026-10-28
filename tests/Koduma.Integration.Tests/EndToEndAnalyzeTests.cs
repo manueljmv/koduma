@@ -19,13 +19,17 @@ public class EndToEndAnalyzeTests : IDisposable
         var publish = Process.Start(new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"publish \"{Path.Combine(_repoRoot, "src", "Koduma.Cli", "Koduma.Cli.csproj")}\" -c Release -r {rid} --self-contained -o \"{_publishDir}\"",
+            Arguments = $"publish \"{Path.Combine(_repoRoot, "src", "Koduma.Cli", "Koduma.Cli.csproj")}\" -c Release -r {rid} --self-contained -nodeReuse:false -o \"{_publishDir}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         })!;
+        // Drain both pipes while waiting: a full pipe buffer (small on Windows) blocks the child forever.
+        // -nodeReuse:false: reused MSBuild nodes outlive publish holding these pipes open, so the reads would never finish.
+        var publishOut = publish.StandardOutput.ReadToEndAsync();
+        var publishErr = publish.StandardError.ReadToEndAsync();
         publish.WaitForExit();
         if (publish.ExitCode != 0)
-            throw new InvalidOperationException("publish failed: " + publish.StandardError.ReadToEnd());
+            throw new InvalidOperationException("publish failed: " + publishErr.Result + publishOut.Result);
     }
 
     public void Dispose()
@@ -86,10 +90,10 @@ public class EndToEndAnalyzeTests : IDisposable
             startInfo.ArgumentList.Add(arg);
 
         using var process = Process.Start(startInfo)!;
-        var stdOut = await process.StandardOutput.ReadToEndAsync();
-        var stdErr = await process.StandardError.ReadToEndAsync();
+        var stdOut = process.StandardOutput.ReadToEndAsync();
+        var stdErr = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
 
-        return (process.ExitCode, stdOut, stdErr);
+        return (process.ExitCode, await stdOut, await stdErr);
     }
 }

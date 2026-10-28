@@ -47,10 +47,30 @@ public class DotnetBuildAnalyzer : ILanguageAnalyzer
             await File.WriteAllTextAsync(targetsFile, BuildTargetsFileContent(sarifDirectory), cancellationToken);
 
             var failures = new List<string>();
+            string? msbuild = null;
             foreach (var target in targets)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var (exitCode, stdOut, stdErr) = await _runner.RunAsync("dotnet", BuildArguments(target, targetsFile), projectPath);
+
+                string executable;
+                IReadOnlyList<string> arguments;
+                if (OperatingSystem.IsWindows() && MSBuildProjects.ContainsNonSdkProject(target))
+                {
+                    msbuild ??= await FindVisualStudioMSBuildAsync(projectPath);
+                    if (msbuild is null)
+                    {
+                        failures.Add($"{Path.GetFileName(target)}: non-SDK-style projects need Visual Studio MSBuild, which was not found via vswhere.");
+                        continue;
+                    }
+
+                    (executable, arguments) = (msbuild, MSBuildArguments(target, targetsFile));
+                }
+                else
+                {
+                    (executable, arguments) = ("dotnet", BuildArguments(target, targetsFile));
+                }
+
+                var (exitCode, stdOut, stdErr) = await _runner.RunAsync(executable, arguments, projectPath);
 
                 // A nonzero exit code is expected when the code has compile errors; only the absence of any SARIF output is fatal (checked below).
                 if (exitCode != 0)
@@ -143,6 +163,33 @@ public class DotnetBuildAnalyzer : ILanguageAnalyzer
         "build", target,
         "--no-incremental",   // an up-to-date build would skip the compiler, and with it the analyzers
         "-nologo", "-v:q",
+    }.Concat(AnalysisProperties(targetsFile)).ToList();
+
+    // Visual Studio's MSBuild.exe, for legacy projects (e.g. SharePoint) that import VS-only targets the .NET SDK does not ship.
+    internal static IReadOnlyList<string> MSBuildArguments(string target, string targetsFile) => new[]
+    {
+        target,
+        "-restore",
+        "-t:Rebuild",   // same reason as --no-incremental
+        "-nologo", "-v:q",
+    }.Concat(AnalysisProperties(targetsFile)).ToList();
+
+    private async Task<string?> FindVisualStudioMSBuildAsync(string workingDirectory)
+    {
+        var vswhere = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft Visual Studio", "Installer", "vswhere.exe");
+        var (exitCode, stdOut, _) = await _runner.RunAsync(vswhere,
+            new[] { "-latest", "-prerelease", "-products", "*", "-requires", "Microsoft.Component.MSBuild", "-find", @"MSBuild\**\Bin\MSBuild.exe" },
+            workingDirectory);
+
+        return exitCode == 0
+            ? stdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault()
+            : null;
+    }
+
+    private static IEnumerable<string> AnalysisProperties(string targetsFile) => new[]
+    {
+        // Reused worker nodes outlive the build holding its redirected stdout open, so reading the output would hang until they idle out.
+        "-nodeReuse:false",
         $"-p:CustomBeforeMicrosoftCommonTargets={targetsFile}",
         "-p:RunAnalyzers=true",
         "-p:EnableNETAnalyzers=true",

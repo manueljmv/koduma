@@ -7,20 +7,59 @@ namespace Koduma.Core.Config;
 
 public static class KodumaConfigLoader
 {
-    public static KodumaConfig LoadOrDefault(string projectPath, IReadOnlyCollection<string> knownRuleIds)
-    {
-        var path = Path.Combine(projectPath, "koduma.json");
-        if (!File.Exists(path))
-            return KodumaConfig.Default;
+    /// <summary>Path of a config shared by every analyzed project; the project's own koduma.json is layered on top of it.</summary>
+    public const string GlobalConfigEnvironmentVariable = "KODUMA_CONFIG";
 
+    public static KodumaConfig LoadOrDefault(string projectPath, IReadOnlyCollection<string> knownRuleIds) =>
+        LoadOrDefault(projectPath, knownRuleIds, Environment.GetEnvironmentVariable(GlobalConfigEnvironmentVariable));
+
+    public static KodumaConfig LoadOrDefault(string projectPath, IReadOnlyCollection<string> knownRuleIds, string? globalConfigPath)
+    {
+        var projectFile = Path.Combine(projectPath, "koduma.json");
+        var project = File.Exists(projectFile) ? Parse(File.ReadAllText(projectFile), "koduma.json", knownRuleIds) : KodumaConfig.Default;
+
+        if (string.IsNullOrWhiteSpace(globalConfigPath))
+            return project;
+
+        // An explicitly configured global file that is missing is a setup mistake, not "no config".
+        if (!File.Exists(globalConfigPath))
+            throw new KodumaConfigException($"Global config '{globalConfigPath}' ({GlobalConfigEnvironmentVariable}) does not exist.");
+
+        KodumaConfig global;
+        try
+        {
+            global = Parse(File.ReadAllText(globalConfigPath), globalConfigPath, knownRuleIds);
+        }
+        catch (KodumaConfigException ex)
+        {
+            throw new KodumaConfigException($"Global config '{globalConfigPath}': {ex.Message}", ex);
+        }
+
+        return Merge(global, project);
+    }
+
+    private static KodumaConfig Merge(KodumaConfig global, KodumaConfig project)
+    {
+        var rules = new Dictionary<string, RuleOverride>(global.Rules);
+        foreach (var (ruleId, ruleOverride) in project.Rules)
+            rules[ruleId] = ruleOverride;
+
+        var projectPatternIds = project.CustomPatterns.Select(p => p.Id).ToHashSet();
+        var customPatterns = global.CustomPatterns.Where(p => !projectPatternIds.Contains(p.Id)).Concat(project.CustomPatterns).ToList();
+
+        return new KodumaConfig(rules, global.Exclude.Concat(project.Exclude).ToList(), customPatterns);
+    }
+
+    private static KodumaConfig Parse(string json, string displayName, IReadOnlyCollection<string> knownRuleIds)
+    {
         JsonNode? root;
         try
         {
-            root = JsonNode.Parse(File.ReadAllText(path));
+            root = JsonNode.Parse(json);
         }
         catch (JsonException ex)
         {
-            throw new KodumaConfigException($"koduma.json is not valid JSON: {ex.Message}", ex);
+            throw new KodumaConfigException($"{displayName} is not valid JSON: {ex.Message}", ex);
         }
 
         var rules = new Dictionary<string, RuleOverride>();

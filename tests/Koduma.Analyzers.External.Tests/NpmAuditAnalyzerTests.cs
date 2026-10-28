@@ -70,7 +70,7 @@ public class NpmAuditAnalyzerTests
 
         var result = await new NpmAuditAnalyzer(runner).AnalyzeAsync("/repo", new[] { "/repo/pkg/package-lock.json" }, KodumaConfig.Default, CancellationToken.None);
 
-        Assert.Equal("/repo/pkg", runner.LastWorkingDirectory);
+        Assert.Equal(Path.GetDirectoryName("/repo/pkg/package-lock.json"), runner.LastWorkingDirectory);
         var issue = Assert.Single(result.Issues);
         Assert.Equal("/repo/pkg/package-lock.json", issue.FilePath);
         Assert.Equal("VULN-GHSA-jf85-cpcp-j695", issue.RuleId);
@@ -172,8 +172,8 @@ public class NpmAuditAnalyzerTests
         const string cleanJson = """{ "vulnerabilities": {} }""";
         var runner = new PerDirectoryFakeRunner(new Dictionary<string, (int, string, string)>
         {
-            ["/repo/pkg-a"] = (1, vulnerableJson, ""),
-            ["/repo/pkg-b"] = (0, cleanJson, ""),
+            [Path.GetDirectoryName("/repo/pkg-a/package-lock.json")!] = (1, vulnerableJson, ""),
+            [Path.GetDirectoryName("/repo/pkg-b/package-lock.json")!] = (0, cleanJson, ""),
         });
 
         var result = await new NpmAuditAnalyzer(runner).AnalyzeAsync(
@@ -181,8 +181,8 @@ public class NpmAuditAnalyzerTests
 
         Assert.Null(result.Error);
         Assert.Equal(2, runner.WorkingDirectories.Count);
-        Assert.Contains("/repo/pkg-a", runner.WorkingDirectories);
-        Assert.Contains("/repo/pkg-b", runner.WorkingDirectories);
+        Assert.Contains(Path.GetDirectoryName("/repo/pkg-a/package-lock.json"), runner.WorkingDirectories);
+        Assert.Contains(Path.GetDirectoryName("/repo/pkg-b/package-lock.json"), runner.WorkingDirectories);
         var issue = Assert.Single(result.Issues);
         Assert.Equal("/repo/pkg-a/package-lock.json", issue.FilePath);
     }

@@ -21,7 +21,13 @@ public class KodumaMcpServerTests : IDisposable
         foreach (var dir in _extraTempDirs)
             Directory.Delete(dir, recursive: true);
         foreach (var symlink in _extraSymlinks)
-            File.Delete(symlink);
+        {
+            // Windows only removes a directory symlink through the directory API; Directory.Delete removes the link, not its target.
+            if (OperatingSystem.IsWindows() && Directory.Exists(symlink))
+                Directory.Delete(symlink);
+            else
+                File.Delete(symlink);
+        }
     }
 
     private static IReadOnlyDictionary<string, JsonElement> Args(string json)

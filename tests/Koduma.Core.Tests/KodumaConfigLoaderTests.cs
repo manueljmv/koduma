@@ -19,6 +19,75 @@ public class KodumaConfigLoaderTests : IDisposable
         Assert.Empty(config.Exclude);
     }
 
+    private string WriteGlobal(string json)
+    {
+        var path = Path.Combine(_root, "global", "koduma.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, json);
+        return path;
+    }
+
+    [Fact]
+    public void LoadOrDefault_UsesGlobalConfig_WhenProjectHasNone()
+    {
+        var global = WriteGlobal("""{ "rules": { "CS-NAMING-001": "off" }, "exclude": ["**/ace/**"] }""");
+
+        var config = KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>(), global);
+
+        Assert.False(config.Rules["CS-NAMING-001"].Enabled);
+        Assert.Equal(new[] { "**/ace/**" }, config.Exclude);
+    }
+
+    [Fact]
+    public void LoadOrDefault_MergesGlobalAndProjectConfig_ProjectWinsPerId()
+    {
+        var global = WriteGlobal("""
+        {
+          "rules": { "CS-NAMING-001": "off", "CS-DESIGN-003": "off" },
+          "exclude": ["**/ace/**"],
+          "customPatterns": [
+            { "id": "CUSTOM-A", "name": "global a", "pattern": "a" },
+            { "id": "CUSTOM-B", "name": "global b", "pattern": "b" }
+          ]
+        }
+        """);
+        File.WriteAllText(Path.Combine(_root, "koduma.json"), """
+        {
+          "rules": { "CS-NAMING-001": { "severity": "minor" } },
+          "exclude": ["**/vendor/**"],
+          "customPatterns": [ { "id": "CUSTOM-B", "name": "project b", "pattern": "bb" } ]
+        }
+        """);
+
+        var config = KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>(), global);
+
+        Assert.Null(config.Rules["CS-NAMING-001"].Enabled);
+        Assert.Equal(Severity.Minor, config.Rules["CS-NAMING-001"].Severity);
+        Assert.False(config.Rules["CS-DESIGN-003"].Enabled);
+        Assert.Equal(new[] { "**/ace/**", "**/vendor/**" }, config.Exclude);
+        Assert.Equal(new[] { "global a", "project b" }, config.CustomPatterns.OrderBy(p => p.Id).Select(p => p.Name));
+    }
+
+    [Fact]
+    public void LoadOrDefault_Throws_WhenGlobalConfigPathDoesNotExist()
+    {
+        var missing = Path.Combine(_root, "missing.json");
+
+        var ex = Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>(), missing));
+
+        Assert.Contains(missing, ex.Message);
+    }
+
+    [Fact]
+    public void LoadOrDefault_NamesGlobalConfigFile_WhenItIsInvalid()
+    {
+        var global = WriteGlobal("""{ "rules": { "CS-NAMING-001": "maybe" } }""");
+
+        var ex = Assert.Throws<KodumaConfigException>(() => KodumaConfigLoader.LoadOrDefault(_root, Array.Empty<string>(), global));
+
+        Assert.Contains(global, ex.Message);
+    }
+
     [Fact]
     public void LoadOrDefault_ParsesOffStringAndSeverityObjectOverrides()
     {

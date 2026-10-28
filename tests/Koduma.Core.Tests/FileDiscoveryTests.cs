@@ -151,4 +151,51 @@ public class FileDiscoveryTests : IDisposable
         Assert.DoesNotContain("src/bin/out.cs", relative);
         Assert.Contains("other/bin", relative);
     }
+
+    [Fact]
+    public void DiscoverFiles_GitignoreCharacterClass_MatchesAnyListedCharacter()
+    {
+        File.WriteAllText(Path.Combine(_root, ".gitignore"), "[Dd]ebug/\n");
+        Directory.CreateDirectory(Path.Combine(_root, "pkg", "Debug"));
+        File.WriteAllText(Path.Combine(_root, "pkg", "Debug", "copy.js"), "x");
+        Directory.CreateDirectory(Path.Combine(_root, "debug"));
+        File.WriteAllText(Path.Combine(_root, "debug", "copy.js"), "x");
+        File.WriteAllText(Path.Combine(_root, "keep.js"), "x");
+
+        var relative = DiscoverRelative();
+
+        Assert.Equal(new HashSet<string> { ".gitignore", "keep.js" }, relative);
+    }
+
+    [Fact]
+    public void DiscoverFiles_AppliesGitignoreOfEnclosingRepository_RelativeToItsDirectory()
+    {
+        Directory.CreateDirectory(Path.Combine(_outside, ".git"));
+        File.WriteAllText(Path.Combine(_outside, ".gitignore"), "build/\n/sub/project/top.cs\n/top.cs\n");
+        var project = Path.Combine(_outside, "sub", "project");
+        Directory.CreateDirectory(Path.Combine(project, "build"));
+        File.WriteAllText(Path.Combine(project, "build", "out.cs"), "x");
+        File.WriteAllText(Path.Combine(project, "top.cs"), "x");
+        Directory.CreateDirectory(Path.Combine(project, "nested"));
+        File.WriteAllText(Path.Combine(project, "nested", "top.cs"), "x");
+
+        var relative = new FileDiscovery().DiscoverFiles(project, KodumaConfig.Default)
+            .Select(f => Path.GetRelativePath(project, f).Replace('\\', '/'))
+            .ToHashSet();
+
+        Assert.Equal(new HashSet<string> { "nested/top.cs" }, relative);
+    }
+
+    [Fact]
+    public void DiscoverFiles_IgnoresParentGitignore_WhenRootIsNotInsideARepository()
+    {
+        File.WriteAllText(Path.Combine(_outside, ".gitignore"), "*.cs\n");
+        var project = Path.Combine(_outside, "project");
+        Directory.CreateDirectory(project);
+        File.WriteAllText(Path.Combine(project, "keep.cs"), "x");
+
+        var files = new FileDiscovery().DiscoverFiles(project, KodumaConfig.Default);
+
+        Assert.Single(files);
+    }
 }

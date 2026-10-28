@@ -12,7 +12,7 @@ public class DotnetBuildAnalyzerTests : IDisposable
 
     private string Write(string relativePath, string content = "")
     {
-        var path = Path.Combine(_root, relativePath);
+        var path = Path.GetFullPath(Path.Combine(_root, relativePath));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
         return path;
@@ -122,9 +122,102 @@ public class DotnetBuildAnalyzerTests : IDisposable
         var arguments = Assert.Single(runner.Calls);
         Assert.Equal("build", arguments[0]);
         Assert.Contains("--no-incremental", arguments);
+        Assert.Contains("-nodeReuse:false", arguments);
         Assert.Contains("-p:EnableNETAnalyzers=true", arguments);
         Assert.Contains("-p:TreatWarningsAsErrors=false", arguments);
         Assert.Equal(_root, runner.LastWorkingDirectory);
+    }
+
+    private const string LegacyProject = """<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"></Project>""";
+    private const string SdkProject = """<Project Sdk="Microsoft.NET.Sdk"></Project>""";
+
+    [Theory]
+    [InlineData("""<Project Sdk="Microsoft.NET.Sdk"></Project>""", true)]
+    [InlineData("""<Project><Sdk Name="Microsoft.NET.Sdk" /></Project>""", true)]
+    [InlineData("""<Project><Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" /></Project>""", true)]
+    [InlineData("""<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"></Project>""", false)]
+    [InlineData("not xml", true)]
+    public void IsSdkStyleProject_DetectsSdkReference(string content, bool expected)
+    {
+        Assert.Equal(expected, MSBuildProjects.IsSdkStyleProject(Write("P.csproj", content)));
+    }
+
+    [Fact]
+    public void ContainsNonSdkProject_LooksInsideSolutions()
+    {
+        Write("Legacy/Legacy.csproj", LegacyProject);
+        Write("Modern/Modern.csproj", SdkProject);
+        var solution = Write("App.sln", """
+            Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Legacy", "Legacy\Legacy.csproj", "{11111111-1111-1111-1111-111111111111}"
+            EndProject
+            Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Modern", "Modern\Modern.csproj", "{22222222-2222-2222-2222-222222222222}"
+            EndProject
+            """);
+        var modernOnly = Write("Modern.slnx", """<Solution><Project Path="Modern/Modern.csproj" /></Solution>""");
+
+        Assert.True(MSBuildProjects.ContainsNonSdkProject(solution));
+        Assert.False(MSBuildProjects.ContainsNonSdkProject(modernOnly));
+        Assert.Equal(2, MSBuildProjects.GetProjectFiles(solution).Count);
+    }
+
+    private sealed class FakeMSBuildRunner : ExternalProcessRunner
+    {
+        public const string MSBuildPath = @"C:\VS\MSBuild\Current\Bin\MSBuild.exe";
+        private readonly string _vswhereOutput;
+
+        public FakeMSBuildRunner(string vswhereOutput) => _vswhereOutput = vswhereOutput;
+
+        public List<(string Executable, IReadOnlyList<string> Arguments)> Calls { get; } = new();
+
+        public override Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments, string? workingDirectory = null)
+        {
+            Calls.Add((executable, arguments));
+            if (executable.EndsWith("vswhere.exe", StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult((0, _vswhereOutput, string.Empty));
+
+            return Task.FromResult((0, string.Empty, string.Empty));
+        }
+    }
+
+    [Fact]
+    public async Task Analyze_BuildsNonSdkProjectWithVisualStudioMSBuild_OnWindows()
+    {
+        var source = Write("src/Program.cs");
+        var project = Write("src/Legacy.csproj", LegacyProject);
+        var runner = new FakeMSBuildRunner(FakeMSBuildRunner.MSBuildPath + "\r\n");
+
+        await new DotnetBuildAnalyzer(runner).AnalyzeAsync(_root, new[] { source }, KodumaConfig.Default, CancellationToken.None);
+
+        var build = runner.Calls.Last();
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Equal("dotnet", build.Executable);
+            return;
+        }
+
+        Assert.Equal(FakeMSBuildRunner.MSBuildPath, build.Executable);
+        Assert.Equal(project, build.Arguments[0]);
+        Assert.Contains("-t:Rebuild", build.Arguments);
+        Assert.Contains("-nodeReuse:false", build.Arguments);
+        Assert.Contains(build.Arguments, a => a.StartsWith("-p:CustomBeforeMicrosoftCommonTargets=", StringComparison.Ordinal));
+        Assert.Contains("-p:TreatWarningsAsErrors=false", build.Arguments);
+    }
+
+    [Fact]
+    public async Task Analyze_ReportsError_WhenNonSdkProjectNeedsMSBuildButVisualStudioIsMissing_OnWindows()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var source = Write("src/Program.cs");
+        Write("src/Legacy.csproj", LegacyProject);
+        var runner = new FakeMSBuildRunner(string.Empty);
+
+        var result = await new DotnetBuildAnalyzer(runner).AnalyzeAsync(_root, new[] { source }, KodumaConfig.Default, CancellationToken.None);
+
+        Assert.NotNull(result.Error);
+        Assert.Contains("Visual Studio MSBuild", result.Error);
+        Assert.Single(runner.Calls);
     }
 
     [Fact]

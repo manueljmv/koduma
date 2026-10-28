@@ -62,6 +62,37 @@ public class EslintAnalyzerTests
         Assert.Equal("/some/project", runner.LastWorkingDirectory);
     }
 
+    private sealed class RecordingRunner : ExternalProcessRunner
+    {
+        public List<IReadOnlyList<string>> Calls { get; } = new();
+
+        public override Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(string executable, IReadOnlyList<string> arguments, string? workingDirectory = null)
+        {
+            Calls.Add(arguments);
+            var file = arguments[2];
+            var json = $$"""[{"filePath":{{System.Text.Json.JsonSerializer.Serialize(file)}},"messages":[{"ruleId":"no-unused-vars","severity":2,"message":"m","line":1,"column":1}]}]""";
+            return Task.FromResult((1, json, string.Empty));
+        }
+    }
+
+    [Fact]
+    public async Task Analyze_MergesResultsOfEveryBatch_WhenFilesExceedCmdLimitOnWindows()
+    {
+        var files = Enumerable.Range(0, 500).Select(i => $"C:\\repo\\src\\some\\deeply\\nested\\folder\\file-{i}-{new string('a', 40)}.js").ToArray();
+        var runner = new RecordingRunner();
+
+        var result = await new EslintAnalyzer(runner).AnalyzeAsync("C:\\repo", files, KodumaConfig.Default, CancellationToken.None);
+
+        Assert.Null(result.Error);
+        Assert.Equal(files, runner.Calls.SelectMany(c => c.Skip(2)));
+        Assert.Equal(runner.Calls.Count, result.Issues.Count);
+        Assert.Equal(files.Length, result.Metrics.FilesAnalyzed);
+        if (OperatingSystem.IsWindows())
+            Assert.True(runner.Calls.Count > 1);
+        else
+            Assert.Single(runner.Calls);
+    }
+
     [Theory]
     [InlineData(true, "eslint.cmd")]
     [InlineData(false, "eslint")]

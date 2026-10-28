@@ -136,4 +136,32 @@ public class ExternalProcessRunnerWindowsRoutingTests
         Assert.Contains("8191", error);
         Assert.Contains("200", error);
     }
+
+    [Fact]
+    public void BatchForCmd_SplitsArgumentsSoEachCommandLineFitsCmdLimit_KeepingOrderAndFixedArguments()
+    {
+        var fixedArguments = new[] { "--format", "json" };
+        var files = Enumerable.Range(0, 500)
+            .Select(i => $"C:\\repo\\src\\some\\deeply\\nested\\folder\\file-{i}-{new string('a', 40)}.js")
+            .ToArray();
+
+        var batches = ExternalProcessRunner.BatchForCmd("eslint.cmd", fixedArguments, files);
+
+        Assert.True(batches.Count > 1);
+        Assert.Equal(files, batches.SelectMany(b => b.Skip(fixedArguments.Length)));
+        foreach (var batch in batches)
+        {
+            Assert.Equal(fixedArguments, batch.Take(fixedArguments.Length));
+            var (_, shellArgs) = ExternalProcessRunner.RerouteThroughCmd("eslint.cmd", batch);
+            Assert.True(string.Join(" ", shellArgs).Length <= ExternalProcessRunner.CmdShimBatchLimit);
+        }
+    }
+
+    [Fact]
+    public void BatchForCmd_ReturnsSingleBatch_WhenEverythingFits()
+    {
+        var batches = ExternalProcessRunner.BatchForCmd("eslint.cmd", new[] { "--format", "json" }, new[] { "a.js", "b.js" });
+
+        Assert.Equal(new[] { new[] { "--format", "json", "a.js", "b.js" } }, batches);
+    }
 }

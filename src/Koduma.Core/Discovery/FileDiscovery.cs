@@ -19,19 +19,56 @@ public class FileDiscovery : IFileDiscovery
         AttributesToSkip = 0,
     };
 
+    // A glob '[...]' / '[!...]' after Regex.Escape; an unclosed '[' stays a literal.
+    private static readonly Regex CharacterClass = new(@"\\\[(!?)([^/\]]+)\]", RegexOptions.Compiled);
+
+    private sealed record IgnoreScope(string BaseDirectory, List<Regex> Patterns);
+
     public IReadOnlyList<string> DiscoverFiles(string rootPath, KodumaConfig config)
     {
         var gitignorePatterns = LoadIgnorePatterns(Path.Combine(rootPath, ".gitignore"));
         var kodumaIgnorePatterns = LoadIgnorePatterns(Path.Combine(rootPath, ".kodumaignore"));
         var allPatterns = gitignorePatterns.Concat(kodumaIgnorePatterns).Concat(config.Exclude).ToList();
-        var regexes = allPatterns.Select(GlobToRegex).ToList();
+        var scopes = new List<IgnoreScope> { new(rootPath, allPatterns.Select(GlobToRegex).ToList()) };
+        scopes.AddRange(EnclosingRepositoryScopes(rootPath));
 
         var result = new List<string>();
-        CollectFiles(rootPath, rootPath, regexes, result);
+        CollectFiles(rootPath, rootPath, scopes, result);
         return result;
     }
 
-    private static void CollectFiles(string rootPath, string directory, List<Regex> regexes, List<string> result)
+    // When the root is a subfolder of a git repository, the .gitignore files of the folders above it (up to the repository root) still apply.
+    private static IEnumerable<IgnoreScope> EnclosingRepositoryScopes(string rootPath)
+    {
+        var root = new DirectoryInfo(Path.GetFullPath(rootPath));
+        if (IsRepositoryRoot(root))
+            return Array.Empty<IgnoreScope>();
+
+        var scopes = new List<IgnoreScope>();
+        for (var directory = root.Parent; directory is not null; directory = directory.Parent)
+        {
+            var patterns = LoadIgnorePatterns(Path.Combine(directory.FullName, ".gitignore"));
+            if (patterns.Count > 0)
+                scopes.Add(new IgnoreScope(directory.FullName, patterns.Select(GlobToRegex).ToList()));
+
+            if (IsRepositoryRoot(directory))
+                return scopes;
+        }
+
+        return Array.Empty<IgnoreScope>();
+    }
+
+    private static bool IsRepositoryRoot(DirectoryInfo directory) =>
+        Directory.Exists(Path.Combine(directory.FullName, ".git")) || File.Exists(Path.Combine(directory.FullName, ".git"));
+
+    private static bool IsIgnored(string file, List<IgnoreScope> scopes) =>
+        scopes.Any(scope =>
+        {
+            var relative = Path.GetRelativePath(scope.BaseDirectory, file).Replace('\\', '/');
+            return scope.Patterns.Any(r => r.IsMatch(relative));
+        });
+
+    private static void CollectFiles(string rootPath, string directory, List<IgnoreScope> scopes, List<string> result)
     {
         foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos("*", EnumerationOptions))
         {
@@ -40,7 +77,7 @@ public class FileDiscovery : IFileDiscovery
 
             if (entry is DirectoryInfo subdirectory)
             {
-                CollectFiles(rootPath, subdirectory.FullName, regexes, result);
+                CollectFiles(rootPath, subdirectory.FullName, scopes, result);
                 continue;
             }
 
@@ -50,7 +87,7 @@ public class FileDiscovery : IFileDiscovery
             if (relative.Split('/').Contains(".git"))
                 continue;
 
-            if (regexes.Any(r => r.IsMatch(relative)))
+            if (IsIgnored(file, scopes))
                 continue;
 
             if (BinaryExtensions.Contains(Path.GetExtension(file)))
@@ -95,11 +132,11 @@ public class FileDiscovery : IFileDiscovery
 
     private static Regex GlobToRegex(string glob)
     {
-        var pattern = "^" + Regex.Escape(glob)
+        var pattern = Regex.Escape(glob)
             .Replace("\\*\\*/", "(.*/)?")
             .Replace("\\*\\*", ".*")
-            .Replace("\\*", "[^/]*")
-            + "$";
-        return new Regex(pattern, RegexOptions.Compiled);
+            .Replace("\\*", "[^/]*");
+        pattern = CharacterClass.Replace(pattern, m => (m.Groups[1].Value == "!" ? "[^" : "[") + m.Groups[2].Value + "]");
+        return new Regex("^" + pattern + "$", RegexOptions.Compiled);
     }
 }
